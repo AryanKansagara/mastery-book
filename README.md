@@ -2,7 +2,7 @@
 
 A standards-based grading gradebook and reteach planner for middle and high school math teachers.
 
-**Live:** https://mastery-book.vercel.app
+**Live:** https://mastery-book-murex.vercel.app
 
 ## The pain
 
