@@ -44,7 +44,7 @@ export default function Report({ id }: { id: string }) {
               {' '}In this class the grade comes from skills, not from averaging points: {cfg.grading.mode === 'share'
                 ? <>a grade of {cfg.grading.rules[0].letter} means at least {Math.round(cfg.grading.rules[0].minShare * 100)}% of skills at {prof.toLowerCase()} or better{cfg.grading.rules[0].floor ? <>, with no skill below level {cfg.grading.rules[0].floor}</> : null}.</>
                 : <>the letter comes from the average level across skills.</>}
-              {' '}Each skill uses {methodLabel(cfg.method, cfg).toLowerCase()} of {displayName(s).split(' ')[0]}&rsquo;s work{cfg.reassess === 'replace' ? ', and a reassessment replaces the earlier score' : ''}, so recent learning counts.</p>
+              {' '}Each skill&rsquo;s level is worked out from all of {displayName(s).split(' ')[0]}&rsquo;s scores on it ({methodLabel(cfg.method, cfg).toLowerCase()}){cfg.reassess === 'replace' ? ', and a reassessment replaces the earlier score' : ''}, so recent learning counts.</p>
             {x.next && <p className="fr-next"><b>What would raise the grade:</b> {x.next.replace(/^To reach/, 'to reach').replace(/^to/, 'To')}</p>}
           </section>
           <table className="fr-table">
