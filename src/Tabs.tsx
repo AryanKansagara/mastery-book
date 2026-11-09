@@ -43,9 +43,9 @@ function Gradebook({ project, ds, cfg, a }: TabProps) {
     <>
       <div className="kpis">
         <div className="kpi"><small>Student-standards at {levelInfo(cfg.scale.proficient, cfg.scale).label}</small><b>{fmtPct(share)}</b><p>{flat.length} with evidence</p></div>
-        <div className="kpi"><small>Grade spread</small><div className="grade-bars">{grades.map(g => <span key={g.letter} title={`${g.letter}: ${g.n}`}><i style={{ height: `${Math.max(4, g.n / Math.max(1, m.students.length) * 100)}%` }} className={`g-${g.letter}`} /><em>{g.letter}</em></span>)}</div></div>
+        <div className="kpi"><small>Grade spread</small><div className="grade-bars">{grades.map(g => <span key={g.letter} title={`${g.letter}: ${g.n} students`}><i style={{ height: 3 + g.n / Math.max(1, ...grades.map(x => x.n)) * 30 }} className={`g-${g.letter}`} /><em>{g.n}</em><em>{g.letter}</em></span>)}</div></div>
         <div className="kpi"><small>Standards under 60% proficient</small><b>{weak}</b><p>of {m.standards.length}; see Reteach groups</p></div>
-        <div className="kpi"><small>Scores replaced by reassessment</small><b>{reassessed}</b><p>Rule: {cfg.reassess === 'replace' ? 'reassessment replaces' : cfg.reassess === 'keep' ? 'keep both' : cfg.reassess}</p></div>
+        <div className="kpi"><small>Student-standards with a replaced score</small><b>{reassessed}</b><p>Rule: {cfg.reassess === 'replace' ? 'reassessment replaces' : cfg.reassess === 'keep' ? 'keep both' : cfg.reassess}</p></div>
       </div>
       <div className="panel">
         <div className="panel-head">

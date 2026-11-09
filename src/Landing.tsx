@@ -49,7 +49,7 @@ function HeroDemo() {
         <div className="seg-control" role="radiogroup" aria-label="Calculation method">
           {HERO_METHODS.map(id => (
             <button key={id} type="button" role="radio" aria-checked={method === id} className={method === id ? 'on' : ''}
-              onClick={() => { setAuto(false); if (id !== method) { setPrev(method); setMethod(id) } }}>{METHODS.find(x => x.id === id)!.label}</button>
+              onClick={() => { setAuto(false); if (id !== method) { setPrev(method); setMethod(id) } }}>{METHODS.find(x => x.id === id)!.label.replace('Decaying average', 'Decaying avg')}</button>
           ))}
         </div>
         <div className="demo-kpis" aria-live="polite">

@@ -76,7 +76,7 @@ export function Sparkline({ values, min, max, proficient, w = 120, h = 30, label
     <svg className="spark" width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label={label ?? `Moved from ${fmt(values[0])} to ${fmt(last)}`}>
       <line x1="0" x2={w} y1={y(proficient)} y2={y(proficient)} className="spark-goal" />
       <path d={d} className="spark-line" />
-      {values.map((v, i) => <circle key={i} cx={x(i)} cy={y(v)} r={i === values.length - 1 ? 3 : 1.6} className={i === values.length - 1 ? `spark-end ${last >= proficient ? 'ok' : ''}` : 'spark-dot'} />)}
+      {values.map((v, i) => <circle key={i} cx={x(i)} cy={y(v)} r={i === values.length - 1 ? 3 : 1.6} className={i === values.length - 1 ? `spark-end ${Math.round(last) >= proficient ? 'ok' : ''}` : 'spark-dot'} />)}
     </svg>
   )
 }
