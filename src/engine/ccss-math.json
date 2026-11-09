@@ -1,0 +1,770 @@
+{
+"source": "Common Core State Standards for Mathematics (grades 6 to 8 and high school Algebra, Functions, Number and Quantity, Statistics)",
+"url": "https://www.thecorestandards.org/Math/",
+"license": "CCSS Public License (NGA Center / CCSSO): free to copy, publish, distribute and display in support of the standards, with attribution. Codes are the official identifiers; descriptions are shortened paraphrases.",
+"attribution": "\u00a9 Copyright 2010. National Governors Association Center for Best Practices and Council of Chief State School Officers. All rights reserved.",
+"standards": [
+{
+"code": "6.RP.A.1",
+"grade": "6",
+"desc": "Use ratio language to describe a relationship between two quantities",
+"q": "intro to ratios"
+},
+{
+"code": "6.RP.A.2",
+"grade": "6",
+"desc": "Understand unit rate a/b for a ratio a:b and use rate language",
+"q": "unit rates"
+},
+{
+"code": "6.RP.A.3",
+"grade": "6",
+"desc": "Use ratio and rate reasoning with tables, tape diagrams, double number lines and percents",
+"q": "ratio tables percent problems"
+},
+{
+"code": "6.NS.A.1",
+"grade": "6",
+"desc": "Divide fractions by fractions and solve word problems with fraction division",
+"q": "dividing fractions by fractions"
+},
+{
+"code": "6.NS.B.2",
+"grade": "6",
+"desc": "Fluently divide multi-digit numbers with the standard algorithm",
+"q": "multi-digit division"
+},
+{
+"code": "6.NS.B.3",
+"grade": "6",
+"desc": "Fluently add, subtract, multiply and divide multi-digit decimals",
+"q": "decimal operations"
+},
+{
+"code": "6.NS.B.4",
+"grade": "6",
+"desc": "Find greatest common factor and least common multiple; use the distributive property",
+"q": "gcf and lcm"
+},
+{
+"code": "6.NS.C.5",
+"grade": "6",
+"desc": "Use positive and negative numbers to represent quantities in real-world contexts",
+"q": "intro to negative numbers"
+},
+{
+"code": "6.NS.C.6",
+"grade": "6",
+"desc": "Locate rational numbers on number lines and coordinate planes",
+"q": "negative numbers on the number line coordinate plane"
+},
+{
+"code": "6.NS.C.7",
+"grade": "6",
+"desc": "Order rational numbers and understand absolute value",
+"q": "absolute value ordering negative numbers"
+},
+{
+"code": "6.NS.C.8",
+"grade": "6",
+"desc": "Solve problems by graphing points in all four quadrants, including distance",
+"q": "coordinate plane four quadrants distance"
+},
+{
+"code": "6.EE.A.1",
+"grade": "6",
+"desc": "Write and evaluate numerical expressions with whole-number exponents",
+"q": "exponents"
+},
+{
+"code": "6.EE.A.2",
+"grade": "6",
+"desc": "Write, read and evaluate expressions in which letters stand for numbers",
+"q": "evaluating expressions with variables"
+},
+{
+"code": "6.EE.A.3",
+"grade": "6",
+"desc": "Apply properties of operations to generate equivalent expressions",
+"q": "equivalent expressions distributive property"
+},
+{
+"code": "6.EE.A.4",
+"grade": "6",
+"desc": "Identify when two expressions are equivalent",
+"q": "identifying equivalent expressions"
+},
+{
+"code": "6.EE.B.5",
+"grade": "6",
+"desc": "Understand solving an equation or inequality as finding values that make it true",
+"q": "testing solutions to equations"
+},
+{
+"code": "6.EE.B.6",
+"grade": "6",
+"desc": "Use variables to represent numbers and write expressions for real-world problems",
+"q": "writing expressions with variables"
+},
+{
+"code": "6.EE.B.7",
+"grade": "6",
+"desc": "Solve one-step equations of the form x + p = q and px = q",
+"q": "one-step equations"
+},
+{
+"code": "6.EE.B.8",
+"grade": "6",
+"desc": "Write inequalities of the form x > c or x < c and graph them",
+"q": "one-step inequalities graphing"
+},
+{
+"code": "6.EE.C.9",
+"grade": "6",
+"desc": "Use variables to represent two quantities that change in relationship to one another",
+"q": "dependent and independent variables"
+},
+{
+"code": "6.G.A.1",
+"grade": "6",
+"desc": "Find the area of triangles, quadrilaterals and polygons by composing and decomposing",
+"q": "area of triangles and composite figures"
+},
+{
+"code": "6.G.A.2",
+"grade": "6",
+"desc": "Find the volume of right rectangular prisms with fractional edge lengths",
+"q": "volume with fractions"
+},
+{
+"code": "6.G.A.3",
+"grade": "6",
+"desc": "Draw polygons in the coordinate plane given vertices; find side lengths",
+"q": "polygons on the coordinate plane"
+},
+{
+"code": "6.G.A.4",
+"grade": "6",
+"desc": "Represent 3D figures with nets and use them to find surface area",
+"q": "surface area nets"
+},
+{
+"code": "6.SP.A.1",
+"grade": "6",
+"desc": "Recognize a statistical question as one that anticipates variability",
+"q": "statistical questions"
+},
+{
+"code": "6.SP.A.2",
+"grade": "6",
+"desc": "Understand that a data distribution has a center, spread and overall shape",
+"q": "shape of distributions"
+},
+{
+"code": "6.SP.A.3",
+"grade": "6",
+"desc": "Recognize that center and variability measures summarize a data set",
+"q": "mean median mode"
+},
+{
+"code": "6.SP.B.4",
+"grade": "6",
+"desc": "Display numerical data in dot plots, histograms and box plots",
+"q": "dot plots histograms box plots"
+},
+{
+"code": "6.SP.B.5",
+"grade": "6",
+"desc": "Summarize numerical data sets in relation to their context",
+"q": "interquartile range mean absolute deviation"
+},
+{
+"code": "7.RP.A.1",
+"grade": "7",
+"desc": "Compute unit rates with ratios of fractions",
+"q": "unit rates with fractions"
+},
+{
+"code": "7.RP.A.2",
+"grade": "7",
+"desc": "Recognize and represent proportional relationships between quantities",
+"q": "proportional relationships"
+},
+{
+"code": "7.RP.A.3",
+"grade": "7",
+"desc": "Use proportional relationships to solve multistep ratio and percent problems",
+"q": "percent word problems markup discount tax"
+},
+{
+"code": "7.NS.A.1",
+"grade": "7",
+"desc": "Add and subtract rational numbers; represent them on a number line",
+"q": "adding and subtracting negative numbers"
+},
+{
+"code": "7.NS.A.2",
+"grade": "7",
+"desc": "Multiply and divide rational numbers",
+"q": "multiplying and dividing negative numbers"
+},
+{
+"code": "7.NS.A.3",
+"grade": "7",
+"desc": "Solve real-world problems with the four operations on rational numbers",
+"q": "rational number word problems"
+},
+{
+"code": "7.EE.A.1",
+"grade": "7",
+"desc": "Add, subtract, factor and expand linear expressions with rational coefficients",
+"q": "combining like terms factoring linear expressions"
+},
+{
+"code": "7.EE.A.2",
+"grade": "7",
+"desc": "Rewrite an expression in different forms to show how quantities are related",
+"q": "rewriting expressions"
+},
+{
+"code": "7.EE.B.3",
+"grade": "7",
+"desc": "Solve multi-step real-life problems with rational numbers in any form",
+"q": "multi-step word problems rational numbers"
+},
+{
+"code": "7.EE.B.4",
+"grade": "7",
+"desc": "Use variables to construct and solve equations and inequalities",
+"q": "two-step equations inequalities"
+},
+{
+"code": "7.G.A.1",
+"grade": "7",
+"desc": "Solve problems involving scale drawings of geometric figures",
+"q": "scale drawings"
+},
+{
+"code": "7.G.A.2",
+"grade": "7",
+"desc": "Draw geometric shapes with given conditions, especially triangles",
+"q": "constructing triangles"
+},
+{
+"code": "7.G.A.3",
+"grade": "7",
+"desc": "Describe the 2D cross-sections of slicing 3D figures",
+"q": "cross sections of 3d figures"
+},
+{
+"code": "7.G.B.4",
+"grade": "7",
+"desc": "Know and use the formulas for the area and circumference of a circle",
+"q": "area and circumference of circles"
+},
+{
+"code": "7.G.B.5",
+"grade": "7",
+"desc": "Use facts about supplementary, complementary, vertical and adjacent angles",
+"q": "angle relationships vertical complementary"
+},
+{
+"code": "7.G.B.6",
+"grade": "7",
+"desc": "Solve problems involving area, volume and surface area of 2D and 3D objects",
+"q": "volume and surface area word problems"
+},
+{
+"code": "7.SP.A.1",
+"grade": "7",
+"desc": "Understand that random sampling supports valid inferences about a population",
+"q": "random sampling"
+},
+{
+"code": "7.SP.A.2",
+"grade": "7",
+"desc": "Use data from a random sample to draw inferences about a population",
+"q": "making inferences from samples"
+},
+{
+"code": "7.SP.B.3",
+"grade": "7",
+"desc": "Informally assess the overlap of two numerical data distributions",
+"q": "comparing distributions"
+},
+{
+"code": "7.SP.B.4",
+"grade": "7",
+"desc": "Use measures of center and variability to compare two populations",
+"q": "comparing populations"
+},
+{
+"code": "7.SP.C.5",
+"grade": "7",
+"desc": "Understand that probability is a number between 0 and 1",
+"q": "basic probability"
+},
+{
+"code": "7.SP.C.6",
+"grade": "7",
+"desc": "Approximate probability by collecting data and observing relative frequency",
+"q": "experimental probability"
+},
+{
+"code": "7.SP.C.7",
+"grade": "7",
+"desc": "Develop probability models and use them to find probabilities",
+"q": "probability models"
+},
+{
+"code": "7.SP.C.8",
+"grade": "7",
+"desc": "Find probabilities of compound events with lists, tables, tree diagrams and simulation",
+"q": "compound events sample space"
+},
+{
+"code": "8.NS.A.1",
+"grade": "8",
+"desc": "Know that numbers that are not rational are irrational; convert repeating decimals",
+"q": "irrational numbers repeating decimals"
+},
+{
+"code": "8.NS.A.2",
+"grade": "8",
+"desc": "Use rational approximations of irrational numbers to compare and locate them",
+"q": "approximating irrational numbers"
+},
+{
+"code": "8.EE.A.1",
+"grade": "8",
+"desc": "Know and apply the properties of integer exponents",
+"q": "properties of exponents"
+},
+{
+"code": "8.EE.A.2",
+"grade": "8",
+"desc": "Use square root and cube root symbols; evaluate small perfect squares and cubes",
+"q": "square roots and cube roots"
+},
+{
+"code": "8.EE.A.3",
+"grade": "8",
+"desc": "Use numbers in scientific notation to estimate very large or small quantities",
+"q": "scientific notation"
+},
+{
+"code": "8.EE.A.4",
+"grade": "8",
+"desc": "Perform operations with numbers in scientific notation",
+"q": "operations with scientific notation"
+},
+{
+"code": "8.EE.B.5",
+"grade": "8",
+"desc": "Graph proportional relationships and interpret the unit rate as slope",
+"q": "graphing proportional relationships slope"
+},
+{
+"code": "8.EE.B.6",
+"grade": "8",
+"desc": "Use similar triangles to explain slope; derive y = mx and y = mx + b",
+"q": "slope intercept form similar triangles"
+},
+{
+"code": "8.EE.C.7",
+"grade": "8",
+"desc": "Solve linear equations in one variable, including ones with no or infinite solutions",
+"q": "linear equations with variables on both sides"
+},
+{
+"code": "8.EE.C.8",
+"grade": "8",
+"desc": "Analyze and solve pairs of simultaneous linear equations",
+"q": "systems of equations"
+},
+{
+"code": "8.F.A.1",
+"grade": "8",
+"desc": "Understand that a function assigns to each input exactly one output",
+"q": "intro to functions"
+},
+{
+"code": "8.F.A.2",
+"grade": "8",
+"desc": "Compare properties of two functions represented in different ways",
+"q": "comparing linear functions"
+},
+{
+"code": "8.F.A.3",
+"grade": "8",
+"desc": "Interpret y = mx + b as defining a linear function; give examples of nonlinear ones",
+"q": "linear and nonlinear functions"
+},
+{
+"code": "8.F.B.4",
+"grade": "8",
+"desc": "Construct a function to model a linear relationship; interpret rate of change",
+"q": "linear models rate of change"
+},
+{
+"code": "8.F.B.5",
+"grade": "8",
+"desc": "Describe a functional relationship qualitatively by analyzing a graph",
+"q": "qualitative graphs"
+},
+{
+"code": "8.G.A.1",
+"grade": "8",
+"desc": "Verify properties of rotations, reflections and translations",
+"q": "rigid transformations"
+},
+{
+"code": "8.G.A.2",
+"grade": "8",
+"desc": "Understand congruence through a sequence of rigid transformations",
+"q": "congruence transformations"
+},
+{
+"code": "8.G.A.3",
+"grade": "8",
+"desc": "Describe the effect of dilations, translations, rotations and reflections with coordinates",
+"q": "dilations transformations coordinates"
+},
+{
+"code": "8.G.A.4",
+"grade": "8",
+"desc": "Understand similarity through transformations including dilations",
+"q": "similarity transformations"
+},
+{
+"code": "8.G.A.5",
+"grade": "8",
+"desc": "Use informal arguments about angle sums, exterior angles and parallel lines cut by a transversal",
+"q": "angles parallel lines transversal triangle angle sum"
+},
+{
+"code": "8.G.B.6",
+"grade": "8",
+"desc": "Explain a proof of the Pythagorean theorem and its converse",
+"q": "pythagorean theorem proof"
+},
+{
+"code": "8.G.B.7",
+"grade": "8",
+"desc": "Apply the Pythagorean theorem to find unknown side lengths",
+"q": "pythagorean theorem word problems"
+},
+{
+"code": "8.G.B.8",
+"grade": "8",
+"desc": "Apply the Pythagorean theorem to find the distance between two points",
+"q": "distance between two points pythagorean"
+},
+{
+"code": "8.G.C.9",
+"grade": "8",
+"desc": "Know and use the volume formulas for cones, cylinders and spheres",
+"q": "volume of cones cylinders spheres"
+},
+{
+"code": "8.SP.A.1",
+"grade": "8",
+"desc": "Construct and interpret scatter plots for bivariate data",
+"q": "scatter plots"
+},
+{
+"code": "8.SP.A.2",
+"grade": "8",
+"desc": "Informally fit a straight line to a scatter plot and assess the fit",
+"q": "line of best fit"
+},
+{
+"code": "8.SP.A.3",
+"grade": "8",
+"desc": "Use a linear model to solve problems and interpret slope and intercept",
+"q": "interpreting linear models"
+},
+{
+"code": "8.SP.A.4",
+"grade": "8",
+"desc": "Understand patterns of association in two-way tables of categorical data",
+"q": "two-way tables"
+},
+{
+"code": "N-RN.A.1",
+"grade": "HS",
+"desc": "Explain how rational exponents follow from properties of integer exponents",
+"q": "rational exponents"
+},
+{
+"code": "N-RN.A.2",
+"grade": "HS",
+"desc": "Rewrite expressions involving radicals and rational exponents",
+"q": "rewriting radicals rational exponents"
+},
+{
+"code": "N-RN.B.3",
+"grade": "HS",
+"desc": "Explain why sums and products of rational and irrational numbers are rational or irrational",
+"q": "sums and products of irrational numbers"
+},
+{
+"code": "N-Q.A.1",
+"grade": "HS",
+"desc": "Use units to understand problems and guide multi-step solutions",
+"q": "units in modeling"
+},
+{
+"code": "N-Q.A.2",
+"grade": "HS",
+"desc": "Define appropriate quantities for descriptive modeling",
+"q": "modeling with quantities"
+},
+{
+"code": "N-Q.A.3",
+"grade": "HS",
+"desc": "Choose a level of accuracy appropriate to limitations on measurement",
+"q": "accuracy and precision"
+},
+{
+"code": "A-SSE.A.1",
+"grade": "HS",
+"desc": "Interpret expressions that represent a quantity in terms of its context",
+"q": "interpreting expressions"
+},
+{
+"code": "A-SSE.A.2",
+"grade": "HS",
+"desc": "Use the structure of an expression to identify ways to rewrite it",
+"q": "factoring using structure"
+},
+{
+"code": "A-SSE.B.3",
+"grade": "HS",
+"desc": "Choose and produce an equivalent form of an expression to reveal properties",
+"q": "completing the square factoring quadratics"
+},
+{
+"code": "A-APR.A.1",
+"grade": "HS",
+"desc": "Add, subtract and multiply polynomials",
+"q": "adding subtracting multiplying polynomials"
+},
+{
+"code": "A-APR.B.3",
+"grade": "HS",
+"desc": "Identify zeros of polynomials when suitable factorizations are available",
+"q": "zeros of polynomials"
+},
+{
+"code": "A-CED.A.1",
+"grade": "HS",
+"desc": "Create equations and inequalities in one variable and use them to solve problems",
+"q": "writing equations word problems"
+},
+{
+"code": "A-CED.A.2",
+"grade": "HS",
+"desc": "Create equations in two or more variables and graph them",
+"q": "writing linear equations two variables"
+},
+{
+"code": "A-CED.A.3",
+"grade": "HS",
+"desc": "Represent constraints with equations or inequalities and interpret solutions",
+"q": "modeling with systems of inequalities"
+},
+{
+"code": "A-CED.A.4",
+"grade": "HS",
+"desc": "Rearrange formulas to highlight a quantity of interest",
+"q": "rearranging formulas"
+},
+{
+"code": "A-REI.A.1",
+"grade": "HS",
+"desc": "Explain each step in solving a simple equation",
+"q": "justifying steps solving equations"
+},
+{
+"code": "A-REI.B.3",
+"grade": "HS",
+"desc": "Solve linear equations and inequalities in one variable",
+"q": "solving linear equations and inequalities"
+},
+{
+"code": "A-REI.B.4",
+"grade": "HS",
+"desc": "Solve quadratic equations in one variable",
+"q": "solving quadratic equations quadratic formula"
+},
+{
+"code": "A-REI.C.5",
+"grade": "HS",
+"desc": "Prove that elimination produces a system with the same solutions",
+"q": "elimination method systems"
+},
+{
+"code": "A-REI.C.6",
+"grade": "HS",
+"desc": "Solve systems of linear equations exactly and approximately",
+"q": "systems of linear equations"
+},
+{
+"code": "A-REI.D.10",
+"grade": "HS",
+"desc": "Understand that the graph of an equation is the set of all its solutions",
+"q": "graphs of equations solutions"
+},
+{
+"code": "A-REI.D.11",
+"grade": "HS",
+"desc": "Explain why the x-coordinates of intersection points solve f(x) = g(x)",
+"q": "solving equations by graphing"
+},
+{
+"code": "A-REI.D.12",
+"grade": "HS",
+"desc": "Graph the solutions to a linear inequality in two variables as a half-plane",
+"q": "graphing linear inequalities two variables"
+},
+{
+"code": "F-IF.A.1",
+"grade": "HS",
+"desc": "Understand that a function assigns each input exactly one output; use f(x) notation",
+"q": "function notation"
+},
+{
+"code": "F-IF.A.2",
+"grade": "HS",
+"desc": "Use function notation, evaluate functions and interpret statements in context",
+"q": "evaluating functions"
+},
+{
+"code": "F-IF.A.3",
+"grade": "HS",
+"desc": "Recognize that sequences are functions defined on the integers",
+"q": "arithmetic and geometric sequences"
+},
+{
+"code": "F-IF.B.4",
+"grade": "HS",
+"desc": "Interpret key features of graphs and tables of a function in context",
+"q": "key features of functions intercepts"
+},
+{
+"code": "F-IF.B.5",
+"grade": "HS",
+"desc": "Relate the domain of a function to its graph and context",
+"q": "domain and range"
+},
+{
+"code": "F-IF.B.6",
+"grade": "HS",
+"desc": "Calculate and interpret the average rate of change of a function",
+"q": "average rate of change"
+},
+{
+"code": "F-IF.C.7",
+"grade": "HS",
+"desc": "Graph functions expressed symbolically and show key features",
+"q": "graphing quadratic functions"
+},
+{
+"code": "F-IF.C.8",
+"grade": "HS",
+"desc": "Write a function in different but equivalent forms to reveal properties",
+"q": "forms of quadratic functions vertex form"
+},
+{
+"code": "F-IF.C.9",
+"grade": "HS",
+"desc": "Compare properties of two functions represented in different ways",
+"q": "comparing functions"
+},
+{
+"code": "F-BF.A.1",
+"grade": "HS",
+"desc": "Write a function that describes a relationship between two quantities",
+"q": "writing functions from context"
+},
+{
+"code": "F-BF.B.3",
+"grade": "HS",
+"desc": "Identify the effect of replacing f(x) with f(x) + k, k f(x), f(kx) and f(x + k)",
+"q": "function transformations shifts"
+},
+{
+"code": "F-LE.A.1",
+"grade": "HS",
+"desc": "Distinguish between situations modeled by linear and exponential functions",
+"q": "linear vs exponential growth"
+},
+{
+"code": "F-LE.A.2",
+"grade": "HS",
+"desc": "Construct linear and exponential functions from graphs, descriptions or tables",
+"q": "writing exponential functions"
+},
+{
+"code": "F-LE.A.3",
+"grade": "HS",
+"desc": "Observe that exponential growth eventually exceeds linear and polynomial growth",
+"q": "exponential vs linear growth over time"
+},
+{
+"code": "F-LE.B.5",
+"grade": "HS",
+"desc": "Interpret the parameters in a linear or exponential function in context",
+"q": "interpreting exponential functions"
+},
+{
+"code": "S-ID.A.1",
+"grade": "HS",
+"desc": "Represent data with plots on the real number line",
+"q": "dot plots histograms box plots"
+},
+{
+"code": "S-ID.A.2",
+"grade": "HS",
+"desc": "Use statistics appropriate to the shape of the data to compare center and spread",
+"q": "comparing data sets center spread"
+},
+{
+"code": "S-ID.A.3",
+"grade": "HS",
+"desc": "Interpret differences in shape, center and spread, accounting for outliers",
+"q": "outliers effect on mean and median"
+},
+{
+"code": "S-ID.B.5",
+"grade": "HS",
+"desc": "Summarize categorical data for two categories in two-way frequency tables",
+"q": "two-way frequency tables"
+},
+{
+"code": "S-ID.B.6",
+"grade": "HS",
+"desc": "Represent data on two quantitative variables on a scatter plot and fit a function",
+"q": "scatter plots fitting a line"
+},
+{
+"code": "S-ID.C.7",
+"grade": "HS",
+"desc": "Interpret the slope and intercept of a linear model in context",
+"q": "interpreting slope and intercept"
+},
+{
+"code": "S-ID.C.8",
+"grade": "HS",
+"desc": "Compute and interpret the correlation coefficient of a linear fit",
+"q": "correlation coefficient"
+},
+{
+"code": "S-ID.C.9",
+"grade": "HS",
+"desc": "Distinguish between correlation and causation",
+"q": "correlation and causation"
+}
+]
+}
