@@ -59,14 +59,14 @@ export function compareSnapshots(a: Snapshot, b: Snapshot, cfg: Config): Snapsho
 
 // ---------- Heatmap export ----------
 
-/** Fill colors per level, low to high, matching the on-screen heatmap. */
-export const LEVEL_FILLS = ['#FDDFDF', '#FEF1D0', '#D5F3D5', '#BFCAFF', '#DFEAFF']
-export function fillFor(level: number, cfg: Config): string {
-  const values = cfg.scale.levels.map(l => l.value).sort((a, b) => a - b)
-  const i = values.indexOf(level)
-  const palette = values.length <= 3 ? ['#FDDFDF', '#D5F3D5', '#BFCAFF'] : values.length === 4 ? ['#FDDFDF', '#FEF1D0', '#D5F3D5', '#BFCAFF'] : ['#EDEDEE', '#FDDFDF', '#FEF1D0', '#D5F3D5', '#BFCAFF']
-  return palette[Math.max(0, i)] ?? palette[palette.length - 1]
+export type Tone = 'low' | 'near' | 'met' | 'top'
+/** Works for any scale: below proficient by 2+, one below, proficient, above proficient. */
+export function tone(level: number, cfg: Config): Tone {
+  const p = cfg.scale.proficient
+  return level > p ? 'top' : level === p ? 'met' : level >= p - 1 ? 'near' : 'low'
 }
+export const TONE_FILL: Record<Tone, string> = { low: '#FDDFDF', near: '#FEE7AD', met: '#BFCAFF', top: '#8DA2FF' }
+export const fillFor = (level: number, cfg: Config) => TONE_FILL[tone(level, cfg)]
 
 export function heatmapRows(m: Matrix, cfg: Config, names = true): (string | number)[][] {
   const head = ['Student', ...m.standards, 'Standards met', 'Letter']
