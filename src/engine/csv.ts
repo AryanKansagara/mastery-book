@@ -54,8 +54,9 @@ export type Parsed = { kind: 'pts'; pts: number; max?: number } | { kind: 'pct';
 
 export function parseScore(raw: string): Parsed {
   const s = raw.trim()
-  if (!s || s === '-' || s === '—') return { kind: 'blank' }
-  if (/^(missing|m|mi|absent|abs|incomplete|inc|not submitted|0\*)$/i.test(s)) return { kind: 'missing' }
+  // "--" is Khan Academy's "not assigned"; "Completed" is its status for videos and articles; Classroom writes statuses too.
+  if (!s || /^[-—–]+$/.test(s) || /^(completed?|turned in|assigned|returned|graded|draft)$/i.test(s)) return { kind: 'blank' }
+  if (/^(missing|m|mi|absent|abs|incomplete|inc|not submitted|not started|0\*)$/i.test(s)) return { kind: 'missing' }
   if (/^(ex|exc|excused|n\/?a)$/i.test(s)) return { kind: 'excused' }
   const frac = s.match(/^(-?\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/)
   if (frac) return { kind: 'pts', pts: +frac[1], max: +frac[2] }
@@ -154,7 +155,7 @@ export function detectKind(headers: string[], rows: string[][] = []): Kind {
 }
 
 // Columns in wide exports that are never assessments.
-const NOT_ASSESSMENT = /^(last ?name|first ?name|email( address)?|student|id|sis (user|login) id|integration id|root account|section|student name|name|student id|student number|overall( grade)?|total|average|status|.*\b(current|final|unposted) (score|grade|points)\b.*|override (score|grade|status)\b.*|grade|period|class)$/i
+const NOT_ASSESSMENT = /^(last ?name|first ?name|email( address)?|student|id|sis (user|login) id|integration id|root account|section|student name|name|student id|student number|overall( grade)?|total|average( score)?|status|.*\b(current|final|unposted) (score|grade|points)\b.*|override (score|grade|status)\b.*|grade|period|class)$/i
 const META_ROW = /^(points possible|points|out of|max(imum)?|date|due( date)?|class average|average|manual posting|read only)$/i
 
 export function assessmentColumns(csv: Csv, map: Mapping): number[] {
@@ -171,6 +172,8 @@ export interface Issue { line: number; level: 'error' | 'warn'; message: string 
 export interface Validation { part: Partial<Dataset> & { mapping?: MappingRow[] }; issues: Issue[]; rows: number; used: number; skipped: number; summary: string }
 export interface MappingRow { assessment: string; standards: string[]; items: Record<string, string>; date?: string; max?: number; reassessOf?: string }
 
+/** A plain number, accepting decimal commas; NaN otherwise. */
+const num = (raw: string) => { const p = parseScore(raw); return p.kind === 'pts' && p.max === undefined ? p.pts : NaN }
 const cell = (r: string[], i: number | undefined) => i === undefined || i < 0 ? '' : (r[i] ?? '').trim()
 
 function studentFrom(r: string[], map: Mapping, kind: Kind): { id: string; name: string; section?: string } | null {
@@ -217,7 +220,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       const d = cell(r, map.date)
       if (d) { const p = parseDate(d); if (p) m.date = p; else issues.push({ line, level: 'warn', message: `Could not read the date "${d}". Use YYYY-MM-DD.` }) }
       const mx = cell(r, map.max)
-      if (mx) { const n = Number(mx); if (n > 0) m.max = n; else issues.push({ line, level: 'warn', message: `Points possible "${mx}" is not a positive number.` }) }
+      if (mx) { const n = num(mx); if (n > 0) m.max = n; else issues.push({ line, level: 'warn', message: `Points possible "${mx}" is not a positive number.` }) }
       const re = cleanAssessmentName(cell(r, map.reassessOf))
       if (re) m.reassessOf = re
       if (!codes.length && !item && !re && !d) issues.push({ line, level: 'warn', message: `"${name}" has no standards listed.` })
@@ -271,11 +274,20 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
         if (p.kind === 'excused') { excused++; continue }
         if (p.kind === 'bad') { issues.push({ line, level: 'warn', message: `"${cell(r, c)}" under "${a.name}" is not a score; ignored.` }); continue }
         if (p.kind === 'pct') { scores.push({ s: st.id, a: a.id, pts: p.pct * (a.max || 100) }); if (!a.max) a.max = 100 }
-        else { if (p.max && !a.max) a.max = p.max; scores.push({ s: st.id, a: a.id, pts: p.pts }) }
+        else {
+          if (p.max && !a.max) a.max = p.max
+          // "7/8" in a column whose maximum is already known from another format is rescaled to that maximum.
+          scores.push({ s: st.id, a: a.id, pts: p.max && a.max !== p.max ? p.pts / p.max * a.max : p.pts })
+        }
         any = true
       }
       if (any) used++
       else issues.push({ line, level: 'warn', message: `${st.name} has no scores.` })
+    }
+    // Columns with no scores at all (ungraded assignments, Khan Academy videos) are not assessments yet.
+    for (const a of [...assessments.values()]) if (!scores.some(s => s.a === a.id)) {
+      assessments.delete(a.id)
+      issues.push({ line: csv.lines[0] ?? 1, level: 'warn', message: `"${a.name}" has no scores yet, so it was left out. Re-import once it is graded.` })
     }
     for (const a of assessments.values()) if (!a.max) {
       const top = Math.max(0, ...scores.filter(s => s.a === a.id).map(s => s.pts))
@@ -296,7 +308,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       if (p.kind === 'excused') { excused++; continue }
       if (p.kind === 'bad') { issues.push({ line, level: 'error', message: `"${cell(r, map.score)}" is not a score; row skipped.` }); continue }
       const mxRaw = cell(r, map.max)
-      const mx = mxRaw ? Number(mxRaw) : p.kind === 'pts' ? p.max ?? NaN : 100
+      const mx = mxRaw ? num(mxRaw) : p.kind === 'pts' ? p.max ?? NaN : 100
       if (mxRaw && !(mx > 0)) { issues.push({ line, level: 'error', message: `Points possible "${mxRaw}" is not a positive number; row skipped.` }); continue }
       const id = assessmentId(name)
       const dRaw = cell(r, map.date), d = dRaw ? parseDate(dRaw) : ''

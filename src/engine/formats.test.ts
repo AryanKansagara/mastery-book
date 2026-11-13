@@ -72,3 +72,32 @@ test('sub-standard codes keep their letter and read the parent description', () 
   assert.equal(findStandard('7.EE.B.4a')?.desc, findStandard('7.EE.B.4')?.desc)
   assert.equal(normalizeCode('Fractions target 2'), 'Fractions target 2')
 })
+
+// Layout as described in Khan Academy's help center ("How do I download my students' assignment scores"):
+// one row per student, one column per assignment, best score for practice, Completed / Not Started for
+// videos and articles, "--" when not assigned, optional "Average score" column.
+test('Khan Academy assignment scores export', () => {
+  const text = 'Student,Average score,Unit rates (Exercise),Proportional relationships (Quiz),Intro to ratios (Video)\nAda Okafor,81%,7/8,75%,Completed\nBo Ng,60%,--,60%,Not Started\n'
+  const { kind, v, names } = run(text)
+  assert.equal(kind, 'generic-wide')
+  assert.deepEqual(names, ['Unit rates (Exercise)', 'Proportional relationships (Quiz)'])
+  const a = v.part.assessments!
+  assert.equal(a[0].max, 8)
+  assert.deepEqual(v.part.scores!.map(s => s.pts), [7, 75, 60])
+  assert.ok(!v.issues.some(i => /not a score/.test(i.message)), JSON.stringify(v.issues))
+  assert.ok(v.issues.some(i => /Intro to ratios \(Video\)" has no scores/.test(i.message)))
+})
+
+test('a column mixing percents and fractions keeps one scale', () => {
+  const { v } = run('Student,Quiz\nAda,75%\nBo,7/8\n')
+  assert.equal(v.part.assessments![0].max, 100)
+  assert.deepEqual(v.part.scores!.map(s => s.pts), [75, 87.5])
+})
+
+test('long scores with decimal commas in score and points possible', () => {
+  const { kind, v } = run('Student Number;Student Name;Assignment;Due Date;Score;Points Possible\n1001;Okafor, Ada;Quiz 1;05/09/2026;8,5;10,0\n')
+  assert.equal(kind, 'powerschool')
+  assert.equal(v.part.scores![0].pts, 8.5)
+  assert.equal(v.part.assessments![0].max, 10)
+  assert.equal(v.part.students![0].name, 'Ada Okafor')
+})
