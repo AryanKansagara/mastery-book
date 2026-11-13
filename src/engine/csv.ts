@@ -61,7 +61,8 @@ export function parseScore(raw: string): Parsed {
   if (frac) return { kind: 'pts', pts: +frac[1], max: +frac[2] }
   const pct = s.match(/^(-?\d+(?:\.\d+)?)\s*%$/)
   if (pct) return { kind: 'pct', pct: +pct[1] / 100 }
-  const n = Number(s.replace(/,/g, ''))
+  // "8,5" and "8,50" are decimal commas (Canvas in European locales); "1,250" is a thousands separator.
+  const n = /^-?\d+,\d{1,2}$/.test(s) ? Number(s.replace(',', '.')) : Number(s.replace(/,/g, ''))
   return Number.isFinite(n) ? { kind: 'pts', pts: n } : { kind: 'bad' }
 }
 
@@ -99,7 +100,7 @@ export type Field = 'sid' | 'name' | 'first' | 'last' | 'assessment' | 'date' | 
 export const FIELD_LABEL: Record<Field, string> = { sid: 'Student ID or email', name: 'Student name', first: 'First name', last: 'Last name', assessment: 'Assessment', date: 'Date', score: 'Score', max: 'Points possible', standard: 'Standard code(s)', item: 'Item / question', reassessOf: 'Reassessment of', desc: 'Description', section: 'Section' }
 export const FIELDS_FOR: Record<Kind, { f: Field; req?: boolean }[]> = {
   'google-classroom': [{ f: 'sid' }, { f: 'first' }, { f: 'last' }],
-  canvas: [{ f: 'name' }, { f: 'sid' }, { f: 'section' }],
+  canvas: [{ f: 'name' }, { f: 'first' }, { f: 'last' }, { f: 'sid' }, { f: 'section' }],
   'generic-wide': [{ f: 'sid' }, { f: 'name' }, { f: 'first' }, { f: 'last' }, { f: 'section' }],
   powerschool: [{ f: 'sid' }, { f: 'name' }, { f: 'assessment', req: true }, { f: 'date' }, { f: 'score', req: true }, { f: 'max' }, { f: 'section' }],
   'generic-long': [{ f: 'sid' }, { f: 'name' }, { f: 'assessment', req: true }, { f: 'date' }, { f: 'score', req: true }, { f: 'max' }, { f: 'section' }],
@@ -112,8 +113,8 @@ export const isWide = (k: Kind) => k === 'google-classroom' || k === 'canvas' ||
 const PATTERNS: Record<Field, RegExp> = {
   sid: /^(student ?(id|number|#)|sis ?user ?id|id|email( address)?|student email|user ?id|login)$/i,
   name: /^(student( name)?|name|full name|student full name|learner)$/i,
-  first: /^(first( name)?|given name)$/i,
-  last: /^(last( name)?|surname|family name)$/i,
+  first: /^(first( ?name)?|given name)$/i,
+  last: /^(last( ?name)?|surname|family name)$/i,
   assessment: /^(assessment|assignment( name)?|test|quiz|task|activity|title)$/i,
   date: /^(date|due( date)?|assessed( on)?|given( on)?|assignment date)$/i,
   score: /^(score|points?( earned)?|mark|raw score|result|level)$/i,
@@ -142,7 +143,7 @@ export function detectKind(headers: string[], rows: string[][] = []): Kind {
   const h = headers.map(x => x.trim().toLowerCase())
   const has = (re: RegExp) => h.some(x => re.test(x))
   if (has(/^first name$/) && has(/^last name$/) && has(/email/)) return 'google-classroom'
-  if (h[0] === 'student' && (has(/^sis (user|login) id$/) || rows.slice(1, 4).some(r => /points possible/i.test(r[0] ?? '')))) return 'canvas'
+  if ((h[0] === 'student' || (h[0] === 'lastname' && h[1] === 'firstname')) && (has(/^sis (user|login) id$/) || rows.slice(1, 4).some(r => /points possible/i.test(r[0] ?? '')))) return 'canvas'
   const student = has(PATTERNS.sid) || has(PATTERNS.name) || has(PATTERNS.first)
   if (!student && has(PATTERNS.standard) && has(PATTERNS.desc) && !has(PATTERNS.assessment)) return 'standards'
   if (!student && has(PATTERNS.assessment) && (has(PATTERNS.standard) || has(PATTERNS.item))) return 'mapping'
@@ -153,13 +154,17 @@ export function detectKind(headers: string[], rows: string[][] = []): Kind {
 }
 
 // Columns in wide exports that are never assessments.
-const NOT_ASSESSMENT = /^(last name|first name|email( address)?|student|id|sis (user|login) id|integration id|section|student name|name|student id|student number|overall|total|average|current (score|grade|points)|final (score|grade|points)|unposted (current|final) (score|grade|points)|.*\b(current|final|unposted) (score|grade|points)\b.*|override (score|grade)|grade|period|class)$/i
+const NOT_ASSESSMENT = /^(last ?name|first ?name|email( address)?|student|id|sis (user|login) id|integration id|root account|section|student name|name|student id|student number|overall( grade)?|total|average|status|.*\b(current|final|unposted) (score|grade|points)\b.*|override (score|grade|status)\b.*|grade|period|class)$/i
 const META_ROW = /^(points possible|points|out of|max(imum)?|date|due( date)?|class average|average|manual posting|read only)$/i
 
 export function assessmentColumns(csv: Csv, map: Mapping): number[] {
   const head = csv.rows[0] ?? []
   const used = new Set(Object.values(map))
-  return head.map((h, i) => i).filter(i => !used.has(i) && head[i].trim() && !NOT_ASSESSMENT.test(head[i].trim()))
+  const cols = head.map((h, i) => i).filter(i => !used.has(i) && head[i].trim() && !NOT_ASSESSMENT.test(head[i].trim()))
+  // Canvas writes every assignment as "Title (id)"; other columns before them are custom gradebook columns such as Notes.
+  const canvas = csv.rows.slice(1, 4).some(r => /^points possible$/i.test((r[0] ?? '').trim()))
+  const withId = cols.filter(i => /\(\d{3,}\)\s*$/.test(head[i]))
+  return canvas && withId.length ? withId : cols
 }
 
 export interface Issue { line: number; level: 'error' | 'warn'; message: string }
@@ -235,11 +240,12 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
     // Meta rows (Points Possible, Date, Class average) come right after the header in Canvas and Google Classroom exports.
     const metaPoints = new Map<number, number>(), metaDates = new Map<number, string>()
     const students_ = body.filter(({ r }) => {
+      if (r.some(x => /^manual posting/i.test(x.trim()))) return false
       const first = (r[0] ?? '').trim(), probe = r.slice(0, 4).map(x => x.trim()).find(x => META_ROW.test(x)) ?? (META_ROW.test(first) ? first : '')
       if (!probe) return true
       for (const c of cols) {
         const v = cell(r, c)
-        if (/points|out of|max/i.test(probe)) { const n = Number(v); if (n > 0) metaPoints.set(c, n) }
+        if (/points|out of|max/i.test(probe)) { const p = parseScore(v); if (p.kind === 'pts' && p.pts > 0) metaPoints.set(c, p.pts) }
         if (/date|due/i.test(probe)) { const d = parseDate(v); if (d) metaDates.set(c, d) }
       }
       return false
@@ -252,6 +258,8 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
     for (const { r, line } of students_) {
       const st = studentFrom(r, map, kind)
       if (!st) { issues.push({ line, level: 'error', message: 'No student name or ID; row skipped.' }); continue }
+      // Canvas adds its Student View account to exports.
+      if (kind === 'canvas' && /^test student$/i.test(st.name)) continue
       if (students.has(st.id)) issues.push({ line, level: 'warn', message: `${st.name} appears more than once; the later row wins.` })
       students.set(st.id, st)
       let any = false
