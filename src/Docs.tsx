@@ -33,9 +33,9 @@ export default function Docs() {
       <div className="eyebrow">Docs</div>
       <h1>Getting your gradebook in</h1>
       <p className="lede">Mastery Book needs three things: your gradebook scores, which standards each assessment measures, and optionally item-level scores per standard. Everything is parsed in your browser.</p>
-      <p className="muted small">Export steps written in November 2026 from each vendor&rsquo;s help center. Menu names change; if a step does not match, look for the export option on the same screen.</p>
+      <p className="muted small">Export steps written in November 2026 from each vendor&rsquo;s help center. The Canvas importer is tested against the column and row layout in Canvas&rsquo;s open-source gradebook exporter (<a href="https://github.com/instructure/canvas-lms/blob/master/lib/gradebook_exporter.rb" target="_blank" rel="noreferrer">lib/gradebook_exporter.rb</a>, checked 13 November 2026). Menu names change; if a step does not match, look for the export option on the same screen.</p>
       <nav className="toc" aria-label="On this page">
-        <a href="#classroom">Google Classroom</a><a href="#canvas">Canvas</a><a href="#powerschool">PowerSchool</a><a href="#generic">Any CSV</a><a href="#mapping">Standards mapping</a><a href="#items">Item scores</a><a href="#methods">Methods</a><a href="#privacy">Privacy and sync</a><a href="#standards">Standards source</a>
+        <a href="#classroom">Google Classroom</a><a href="#canvas">Canvas</a><a href="#powerschool">PowerSchool</a><a href="#khan">Khan Academy</a><a href="#generic">Any CSV</a><a href="#mapping">Standards mapping</a><a href="#items">Item scores</a><a href="#methods">Methods</a><a href="#privacy">Privacy and sync</a><a href="#standards">Standards source</a>
       </nav>
 
       <h2 id="classroom">Google Classroom</h2>
@@ -50,10 +50,18 @@ export default function Docs() {
       <ol>
         <li>In the course, open <b>Grades</b>.</li>
         <li>Click <b>Export</b> and choose <b>Export Entire Gradebook</b>. Canvas builds a CSV and downloads it.</li>
-        <li>Drop the CSV in. The <b>Points Possible</b> row sets each assessment&rsquo;s maximum, the numeric suffix on assignment names (&ldquo;Unit 1 Quiz (48213)&rdquo;) is removed, &ldquo;Last, First&rdquo; becomes &ldquo;First Last&rdquo;, and Current/Final/Unposted score columns are ignored.</li>
+        <li>Drop the CSV in. The <b>Points Possible</b> row sets each assessment&rsquo;s maximum, the numeric suffix on assignment names (&ldquo;Unit 1 Quiz (48213)&rdquo;) is removed, &ldquo;Last, First&rdquo; becomes &ldquo;First Last&rdquo;, and Current/Final/Unposted/Override columns (including assignment-group and grading-period totals) are ignored.</li>
+        <li>Also handled: the <b>Manual Posting</b> row, custom gradebook columns such as Notes, the separate LastName/FirstName layout, <b>EX</b> and <b>N/A</b> (not counted), Canvas&rsquo;s Test Student, and semicolon files with decimal commas from non-US locales.</li>
         <li>Canvas exports have no due dates. Column order is used as time order until you add dates on the Assessments panel or in a mapping file. Time order matters for most recent, decaying average and power law.</li>
       </ol>
       <p className="small muted">If you already use Canvas Outcomes, keep tagging there; here you tag each assignment once on the Assessments panel.</p>
+
+      <h2 id="khan">Khan Academy assignment scores</h2>
+      <ol>
+        <li>In your Khan Academy class, open <b>Assignments &gt; Scores</b> and download the scores as CSV (Khan Academy&rsquo;s help center describes the current menu).</li>
+        <li>Drop it in. Each assignment column imports as an assessment: fractions like <b>7/8</b> and percents both work, <b>--</b> (not assigned) and <b>Not Started</b> are not counted, the <b>Average score</b> column is skipped, and video or article columns that only say Completed are left out.</li>
+      </ol>
+      <p className="small muted">Layout taken from Khan Academy&rsquo;s help article on downloading assignment scores; the file has no points-possible row, so check the maximum on the Assessments panel.</p>
 
       <h2 id="powerschool">PowerSchool (PowerTeacher Pro) and similar SIS gradebooks</h2>
       <ol>
@@ -103,6 +111,7 @@ export default function Docs() {
 
       <h2 id="standards">Standards source</h2>
       <p>{CCSS.length} standard codes are bundled: {CCSS_SOURCE.source}. Codes are the official identifiers from <a href={CCSS_SOURCE.url} target="_blank" rel="noreferrer">the Common Core State Standards for Mathematics</a>; descriptions are shortened paraphrases written for this app, and the Khan Academy search terms are mine.</p>
+      <p>Sub-standards are kept: <b>7.EE.B.4a</b>, <b>7.EE.4a</b> and the official <b>CCSS.MATH.CONTENT.7.EE.B.4.A</b> all read as 7.EE.B.4a and show the parent standard&rsquo;s description.</p>
       <p className="small">License: {CCSS_SOURCE.license}</p>
       <p className="small muted">{CCSS_SOURCE.attribution}</p>
     </section>

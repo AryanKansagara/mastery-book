@@ -73,7 +73,7 @@ export default function DataTab({ project, ds, cfg, update, setConfig }: { proje
       {ds.students.length > 0 && untagged.length > 0 && !readOnly && <div className="banner warn"><span><strong>{untagged.length} assessment{untagged.length > 1 ? 's have' : ' has'} no standards yet.</strong> Scores only count once an assessment is tagged. Use the Assessments panel below or import a mapping file.</span></div>}
 
       <div className="panel">
-        <div className="panel-head"><h2>Import</h2><span className="muted small">Google Classroom · Canvas · PowerSchool · any CSV · mapping · item scores · standards list</span></div>
+        <div className="panel-head"><h2>Import</h2><span className="muted small">Google Classroom · Canvas · Khan Academy · PowerSchool · any CSV · mapping · item scores · standards list</span></div>
         {readOnly && <p className="muted small">This is a synthetic sample, so its data is read-only. Importing here starts a new class. Want to rehearse? <button type="button" className="linkish" onClick={() => download(`${project.sampleId}-gradebook.csv`, gradebookCsv(ds))}>Download the sample gradebook</button> and <button type="button" className="linkish" onClick={() => download(`${project.sampleId}-mapping.csv`, mappingCsv(ds))}>its mapping</button>, then drop both back in.</p>}
         <div className={`drop${drag ? ' over' : ''}`} role="button" tabIndex={0} aria-label="Choose CSV files to import"
           onClick={() => input.current?.click()} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.current?.click() } }}

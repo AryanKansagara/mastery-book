@@ -123,7 +123,8 @@ export function CopyButton({ text, label = 'Copy', className = '' }: { text: str
 }
 
 export function download(name: string, content: string | Blob, type = 'text/csv') {
-  const blob = typeof content === 'string' ? new Blob([content], { type }) : content
+  // The BOM makes Excel read CSV as UTF-8, so accented names survive.
+  const blob = typeof content === 'string' ? new Blob([type === 'text/csv' ? '\ufeff' + content : content], { type }) : content
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
   a.download = name
