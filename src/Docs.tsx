@@ -68,7 +68,7 @@ export default function Docs() {
         <li>In PowerTeacher Pro open <b>Grading &gt; Scoresheet</b> for the class and use the export option to download the scoresheet as CSV. That file is one column per assignment and imports as a wide gradebook.</li>
         <li>Or ask your data team for an <b>assignment scores</b> extract with one row per score: Student Number, Student Name, Assignment, Due Date, Score, Points Possible. Mastery Book detects that layout as &ldquo;PowerSchool-style&rdquo;.</li>
       </ol>
-      <p className="small muted">Not affiliated with or tested against a live PowerSchool district; any CSV with those columns works.</p>
+      <p className="small muted">Not tested against a live PowerSchool district; any CSV with those columns works.</p>
 
       <h2 id="generic">Any CSV</h2>
       <p>Either one column per assessment (students in rows) or one row per score:</p>

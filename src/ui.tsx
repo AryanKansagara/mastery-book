@@ -282,7 +282,7 @@ export function Footer() {
       <div className="footer-inner">
         <div className="footer-brand"><Monogram /> <strong>Mastery Book</strong></div>
         <nav className="footer-nav" aria-label="Footer"><Link href="/app">Classes</Link><Link href="/docs">Docs</Link><Link href="/settings">Settings</Link></nav>
-        <p>Built by Aryan Kansagara. Independent project, not affiliated with Khan Academy.</p>
+        <p>Built by Aryan Kansagara.</p>
         <p className="muted small">Sample classes and every student in them are synthetic. Gradebooks are processed in your browser; student names stay on this device even when you sign in to sync.</p>
       </div>
     </footer>

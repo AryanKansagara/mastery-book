@@ -29,4 +29,4 @@ npm run build
 
 Optional sync: copy `.env.example` to `.env` with `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`.
 
-Independent project, not affiliated with Khan Academy.
+
