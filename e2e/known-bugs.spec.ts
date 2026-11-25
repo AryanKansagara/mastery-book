@@ -10,14 +10,14 @@ test('#2 a student named Max is a student', async ({ page }) => {
   await expect(points(page, 'Quiz 1')).toHaveValue('10')
 })
 
-test.fail('#3 an unclosed quote stops the import', async ({ page }) => {
+test('#3 an unclosed quote stops the import', async ({ page }) => {
   await newClass(page)
   await choose(page, { name: 'q.csv', text: 'Student Name,Quiz 1,Quiz 2\nBo,7,6\n"Okafor, Ada,8,9\nCy,5,4\n' })
   await expect(pending(page, 'q.csv')).toContainText('line 3')
   await expect(pending(page, 'q.csv').getByRole('button', { name: 'Import', exact: true })).toBeDisabled()
 })
 
-test.fail('#3 rows with extra values or a cut-off end are reported, not scored', async ({ page }) => {
+test('#3 rows with extra values or a cut-off end are reported, not scored', async ({ page }) => {
   await newClass(page)
   await choose(page, { name: 'w.csv', text: 'Student Name,Quiz 1,Quiz 2\nOkafor, Ada,8,9\nBo,7,6\nCy,8' })
   await expect(pending(page, 'w.csv')).toContainText('1 students, 2 assessments, 2 scores')

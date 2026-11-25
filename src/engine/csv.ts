@@ -1,22 +1,33 @@
 import { normalizeCode } from './standards.ts'
 import type { Assessment, Dataset, ItemScore, Score, Student } from './types.ts'
 
-export interface Csv { rows: string[][]; lines: number[] }
+export interface Csv {
+  rows: string[][]
+  lines: number[]
+  /** Line where a quote starts that is never closed properly */
+  badQuote?: number
+  /** The last row ends without a line end */
+  openEnd?: boolean
+}
 
 export function parseCsv(text: string): Csv {
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1)
   const delim = sniffDelimiter(text)
   const rows: string[][] = []
   const lines: number[] = []
-  let row: string[] = [], field = '', quoted = false, line = 1, rowLine = 1
+  let row: string[] = [], field = '', quoted = false, line = 1, rowLine = 1, quoteLine = 0, badQuote = 0
   for (let i = 0; i < text.length; i++) {
     const c = text[i]
     if (quoted) {
-      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++ } else quoted = false }
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++ } else {
+        quoted = false
+        // Text right after a quote that spanned lines means an earlier quote was left open and this one opened a field.
+        if (line > quoteLine && /[^\s,;\t]/.test(text[i + 1] ?? '')) badQuote ||= quoteLine
+      } }
       else { if (c === '\n') line++; field += c }
       continue
     }
-    if (c === '"' && field.trim() === '') { quoted = true; field = '' }
+    if (c === '"' && field.trim() === '') { quoted = true; field = ''; quoteLine = line }
     else if (c === delim) { row.push(field.trim()); field = '' }
     else if (c === '\n' || c === '\r') {
       if (c === '\r' && text[i + 1] === '\n') i++
@@ -26,7 +37,8 @@ export function parseCsv(text: string): Csv {
     } else field += c
   }
   if (field !== '' || row.length) { row.push(field.trim()); if (row.some(x => x !== '')) { rows.push(row); lines.push(rowLine) } }
-  return { rows, lines }
+  if (quoted) badQuote ||= quoteLine
+  return { rows, lines, ...(badQuote ? { badQuote } : {}), ...(text && !/[\r\n]$/.test(text) ? { openEnd: true } : {}) }
 }
 
 function sniffDelimiter(text: string): string {
@@ -208,9 +220,17 @@ const withKnownName = (cur: Student | undefined, s: Student): Student => cur?.na
 export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number[]): Validation {
   const issues: Issue[] = []
   const head = csv.rows[0] ?? []
-  const body = csv.rows.slice(1).map((r, i) => ({ r, line: csv.lines[i + 1] }))
+  const all = csv.rows.slice(1).map((r, i) => ({ r, line: csv.lines[i + 1] }))
+  if (csv.badQuote) return { part: {}, issues: [{ line: csv.badQuote, level: 'error', message: 'The quote that starts on this line is never closed, so the rows after it cannot be told apart. Fix the quote or export the file again.' }], rows: all.length, used: 0, skipped: all.length, summary: 'Broken quoting' }
   for (const { f, req } of FIELDS_FOR[kind]) if (req && (map[f] === undefined || map[f]! < 0)) issues.push({ line: csv.lines[0] ?? 1, level: 'error', message: `Map a column to "${FIELD_LABEL[f]}" to continue.` })
-  if (issues.length) return { part: {}, issues, rows: body.length, used: 0, skipped: body.length, summary: 'Column mapping incomplete' }
+  if (issues.length) return { part: {}, issues, rows: all.length, used: 0, skipped: all.length, summary: 'Column mapping incomplete' }
+  const body = all.filter(({ r, line }, i) => {
+    if (r.slice(head.length).some(x => x && !/^\(read only\)$/i.test(x))) { issues.push({ line, level: 'error', message: `This row has ${r.length} values but the header has ${head.length} columns, so they cannot be matched up (a comma inside a name or number needs quotes); row skipped.` }); return false }
+    // A file that leaves out trailing empty cells elsewhere may do so on its last row too.
+    const cut = csv.openEnd && i === all.length - 1 && r.length < head.length && all.slice(0, -1).every(x => x.r.length >= head.length)
+    if (cut) issues.push({ line, level: 'error', message: `The file ends in the middle of this row (${r.length} of ${head.length} columns); row skipped. Export it again.` })
+    return !cut
+  })
 
   if (kind === 'standards') {
     const out: { code: string; desc: string }[] = []
@@ -219,7 +239,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       if (!code) { issues.push({ line, level: 'error', message: 'No standard code; row skipped.' }); continue }
       out.push({ code, desc: desc || code })
     }
-    return { part: { customStandards: out }, issues, rows: body.length, used: out.length, skipped: body.length - out.length, summary: `${out.length} standards` }
+    return { part: { customStandards: out }, issues, rows: all.length, used: out.length, skipped: all.length - out.length, summary: `${out.length} standards` }
   }
 
   if (kind === 'mapping') {
@@ -245,7 +265,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       used++
     }
     for (const m of rows.values()) if (m.reassessOf && !rows.has(m.reassessOf.toLowerCase())) issues.push({ line: 0, level: 'warn', message: `"${m.assessment}" is a reassessment of "${m.reassessOf}", which is not in this file. It will link if that assessment is already imported.` })
-    return { part: { mapping: [...rows.values()] }, issues, rows: body.length, used, skipped: body.length - used, summary: `${rows.size} assessments, ${new Set([...rows.values()].flatMap(m => m.standards)).size} standards` }
+    return { part: { mapping: [...rows.values()] }, issues, rows: all.length, used, skipped: all.length - used, summary: `${rows.size} assessments, ${new Set([...rows.values()].flatMap(m => m.standards)).size} standards` }
   }
 
   const students = new Map<string, Student>()
@@ -351,7 +371,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
   }
   if (missing) issues.push({ line: 0, level: 'warn', message: `${missing} "missing" marks are not counted as evidence (a missing assessment is not a 0 on a standard). Chase those separately.` })
   if (excused) issues.push({ line: 0, level: 'warn', message: `${excused} excused marks ignored.` })
-  const nRows = isWide(kind) ? students.size + issues.filter(i => i.level === 'error' && i.line > 0).length : body.length
+  const nRows = isWide(kind) ? students.size + issues.filter(i => i.level === 'error' && i.line > 0).length : all.length
   return {
     part: { students: [...students.values()], assessments: [...assessments.values()], scores, itemScores },
     issues, rows: nRows, used, skipped: issues.filter(i => i.level === 'error').length,

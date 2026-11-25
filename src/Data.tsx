@@ -30,6 +30,7 @@ export default function DataTab({ project, ds, cfg, update, setConfig }: { proje
       if (f.size > 20_000_000) { toast(`${f.name} is over 20 MB. Export one class at a time.`, { tone: 'error' }); continue }
       if (/\.xlsx?$/i.test(f.name)) { toast(`${f.name}: save the sheet as CSV first (File > Download > CSV).`, { tone: 'error' }); continue }
       const csv = parseCsv(await f.text())
+      if (csv.rows.length < 2 && csv.badQuote) { toast(`${f.name}: the quote that starts on line ${csv.badQuote} is never closed, so no rows can be read.`, { tone: 'error' }); continue }
       if (csv.rows.length < 2) { toast(`${f.name} has no data rows.`, { tone: 'error' }); continue }
       const kind = detectKind(csv.rows[0], csv.rows)
       const map = autoMap(csv.rows[0], kind)
@@ -155,7 +156,7 @@ function PendingFile({ p, onChange, onCancel, onCommit }: { p: Pending; onChange
   const [busy, setBusy] = useState(false)
   const headers = p.csv.rows[0] ?? []
   const errors = v.issues.filter(i => i.level === 'error')
-  const blocking = errors.some(e => /Map a column|No assessment columns/.test(e.message))
+  const blocking = errors.some(e => /Map a column|No assessment columns|never closed/.test(e.message))
   return (
     <div className="panel">
       <div className="panel-head">
