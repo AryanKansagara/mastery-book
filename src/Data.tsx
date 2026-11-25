@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { assessmentColumns, autoMap, detectKind, FIELD_LABEL, FIELDS_FOR, isWide, KINDS, mergeDataset, parseCsv, toCsv, validate, withMax, type Csv, type Kind, type Mapping, type Validation } from './engine/csv.ts'
-import { SCALES, standardsInUse } from './engine/mastery.ts'
+import { chronological, SCALES, standardsInUse } from './engine/mastery.ts'
 import { detectScoreMode, notLevels } from './engine/scoremode.ts'
 import { CCSS, normalizeCode } from './engine/standards.ts'
 import type { Assessment, Config, Dataset, GradeRule } from './engine/types.ts'
@@ -100,7 +100,7 @@ export default function DataTab({ project, ds, cfg, update, setConfig }: { proje
           <datalist id="ccss">{[...(ds.customStandards ?? []), ...CCSS].map(s => <option key={s.code} value={s.code}>{s.desc}</option>)}</datalist>
           <div className="table-wrap"><table className="assess-table">
             <thead><tr><th>Assessment</th><th>Date</th><th className="num">Points</th><th>Standards</th><th>Reassessment of</th></tr></thead>
-            <tbody>{[...ds.assessments].sort((x, y) => (x.date || '9').localeCompare(y.date || '9') || x.order - y.order).map(a => (
+            <tbody>{chronological(ds.assessments).map(a => (
               <tr key={a.id}>
                 <th scope="row" className="break">{a.name}{a.items && Object.keys(a.items).length > 0 && <div className="muted tiny">{Object.keys(a.items).length} tagged items</div>}</th>
                 <td><input className="table-input" type="date" value={a.date} disabled={readOnly} aria-label={`Date of ${a.name}`} onChange={e => setAssessment(a.id, { date: e.target.value })} /></td>
@@ -261,7 +261,7 @@ function GradingSetup({ cfg, setConfig }: { cfg: Config; setConfig(p: Partial<Co
 
 // ---------- CSV round trips ----------
 
-const sorted = (ds: Dataset) => [...ds.assessments].sort((x, y) => (x.date || '9').localeCompare(y.date || '9') || x.order - y.order)
+const sorted = (ds: Dataset) => chronological(ds.assessments)
 export function gradebookCsv(ds: Dataset): string {
   const as = sorted(ds)
   const max = new Map(ds.assessments.map(a => [a.id, a.max]))

@@ -126,12 +126,26 @@ export function powerLaw(values: number[], min = 0, max = 4): number {
 
 // ---------- Evidence ----------
 
-const byTime = (x: { date: string; order: number }, y: { date: string; order: number }) => (x.date || '9999').localeCompare(y.date || '9999') || x.order - y.order
+/**
+ * Assessments oldest first. An undated one keeps its column place: it goes with the dated assessment before it in
+ * column order, or the one after it when there is none before.
+ */
+export function chronological<T extends { date: string; order: number }>(list: T[]): T[] {
+  const cols = [...list].sort((x, y) => x.order - y.order)
+  const at = new Map<T, string>()
+  let last = cols.find(a => a.date)?.date ?? ''
+  for (const a of cols) at.set(a, last = a.date || last)
+  return cols.sort((x, y) => at.get(x)!.localeCompare(at.get(y)!) || x.order - y.order)
+}
+
+// Evidence order is the assessment's place in time (see evidenceFor), so undated evidence compares by it.
+const byTime = (x: Evidence, y: Evidence) => (x.date && y.date ? x.date.localeCompare(y.date) : 0) || x.order - y.order
 
 /** Score -> level for one student, one assessment, one standard. Item scores tagged to the standard win over the whole-assessment score. */
 export function evidenceFor(ds: Dataset, cfg: Config): Map<string, Map<string, Evidence[]>> {
   const out = new Map<string, Map<string, Evidence[]>>()
   const aById = new Map(ds.assessments.map(a => [a.id, a]))
+  const place = new Map(chronological(ds.assessments).map((a, i) => [a.id, i]))
   const items = new Map<string, { pts: number; max: number }>()
   for (const it of ds.itemScores) {
     const std = it.std || (it.item ? aById.get(it.a)?.items?.[it.item] : undefined)
@@ -147,7 +161,7 @@ export function evidenceFor(ds: Dataset, cfg: Config): Map<string, Map<string, E
     let m = out.get(s)
     if (!m) out.set(s, m = new Map())
     const l = m.get(std) ?? []
-    l.push({ a: a.id, name: a.name, date: a.date, order: a.order, value, reassessOf: a.reassessOf })
+    l.push({ a: a.id, name: a.name, date: a.date, order: place.get(a.id)!, value, reassessOf: a.reassessOf })
     m.set(std, l)
   }
   const seen = new Set<string>()
@@ -174,11 +188,31 @@ export function evidenceFor(ds: Dataset, cfg: Config): Map<string, Map<string, E
   return out
 }
 
+/** A reassessment link is explicit, so it holds even when the original's date or column puts it later. */
+function originalsFirst(list: Evidence[]): Evidence[] {
+  const out: Evidence[] = [], seen = new Set<Evidence>()
+  const originalOf = (e: Evidence) => e.reassessOf ? list.find(x => x.a === e.reassessOf) : undefined
+  const circular = (e: Evidence) => {
+    const path = new Set([e])
+    for (let x = originalOf(e); x; x = originalOf(x)) { if (path.has(x)) return true; path.add(x) }
+    return false
+  }
+  const place = (e: Evidence) => {
+    if (seen.has(e)) return
+    seen.add(e)
+    const original = originalOf(e)
+    if (original && !circular(e)) place(original)
+    out.push(e)
+  }
+  list.forEach(place)
+  return out
+}
+
 /** Applies the reassessment rule to one student's evidence on one standard (chronological in, chronological out). */
 export function applyReassess(list: Evidence[], rule: ReassessRule): Evidence[] {
   if (rule === 'keep') return list
   let cur: Evidence[] = []
-  for (const e of list) {
+  for (const e of originalsFirst(list)) {
     const target = e.reassessOf ? cur.findIndex(x => x.a === e.reassessOf || x.replaced?.includes(e.reassessOf!)) : -1
     if (target < 0) { cur.push(e); continue }
     const o = cur[target]
@@ -204,7 +238,7 @@ export function cellFor(raw: Evidence[] | undefined, cfg: Config, method: Method
 /** Standards in use, in the order they first appear by assessment date. */
 export function standardsInUse(ds: Dataset): string[] {
   const seen: string[] = []
-  for (const a of [...ds.assessments].sort(byTime)) for (const s of a.standards) if (!seen.includes(s)) seen.push(s)
+  for (const a of chronological(ds.assessments)) for (const s of a.standards) if (!seen.includes(s)) seen.push(s)
   return seen
 }
 

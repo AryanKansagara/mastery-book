@@ -66,13 +66,13 @@ test('#6 points added to a level-scored class are pointed out', async ({ page })
   await expect(page.locator('.banner.warn')).toContainText('1 assessment is not out of 4, 5 or the top of your scale: Unit test')
 })
 
-test.fail('#7 undated work keeps its column place', async ({ page }) => {
+test('#7 undated work keeps its column place', async ({ page }) => {
   await classWith(page, 'Student,Quiz 1,Quiz 2,Quiz 3\nPoints Possible,10,10,10\nDate,,,9/30/2026\nAda,5,5,10\n', 'assessment,standard\nQuiz 1,7.EE.A.1\nQuiz 2,7.EE.A.1\nQuiz 3,7.EE.A.1\n')
   await method(page, 'recent')
   await expect.poll(async () => (await levels(page, 'Ada'))[0]).toBe('4')
 })
 
-test.fail('#7 a retake listed before its original still replaces it', async ({ page }) => {
+test('#7 a retake listed before its original still replaces it', async ({ page }) => {
   await classWith(page, 'Student,Retake,Quiz\nPoints Possible,10,10\nAda,10,5\n', 'assessment,standard,reassessment of\nQuiz,7.EE.A.1,\nRetake,7.EE.A.1,Quiz\n')
   expect((await levels(page, 'Ada'))[0]).toBe('4')
 })
