@@ -77,11 +77,15 @@ test('#7 a retake listed before its original still replaces it', async ({ page }
   expect((await levels(page, 'Ada'))[0]).toBe('4')
 })
 
-test.fail('#8 no evidence is neither on track nor 0%', async ({ page }) => {
+test('#8 no evidence is neither on track nor 0%', async ({ page }) => {
   await classWith(page, 'Student,Quiz 1\nPoints Possible,10\nAda,9\nBo,\n', 'assessment,standard\nQuiz 1,7.EE.A.1\nQuiz 9,7.EE.B.4\n')
   await expect(kpi(page, 'Standards under 60% proficient')).toHaveText('0')
   await tab(page, 'Reteach groups')
   await expect(page.locator('.panel.tint')).toContainText('On track (1)')
+  await expect(page.locator('.panel', { hasText: 'No evidence yet (1)' })).toContainText('Bo')
+  await expect(page.getByText('Every student is at')).toHaveCount(0)
+  await tab(page, 'Gradebook')
+  await expect(page.locator('.std-list li').filter({ hasText: '7.EE.B.4' }).locator('.tab-nums')).toHaveText('—')
 })
 
 test.fail('#9 a comma in a semicolon file is a decimal mark', async ({ page }) => {
