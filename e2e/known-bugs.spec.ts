@@ -127,7 +127,7 @@ test('#11 a score that became excused is removed on re-import', async ({ page })
   await expect(pending(page, 'twice.csv').getByRole('button', { name: 'Import', exact: true })).toBeDisabled()
 })
 
-test.fail('#12 a new student is not "unchanged"', async ({ page }) => {
+test('#12 a new student is not "unchanged"', async ({ page }) => {
   await classWith(page, 'Student,Quiz 1\nPoints Possible,10\nAda,9\n', 'assessment,standard\nQuiz 1,7.EE.A.1\n')
   const save = async (label: string) => {
     await page.getByRole('button', { name: 'Save snapshot' }).click()
@@ -142,7 +142,10 @@ test.fail('#12 a new student is not "unchanged"', async ({ page }) => {
   await expect(row(page, 'Bo')).toBeVisible()
   await save('Two')
   await tab(page, 'History')
-  await expect(kpi(page, 'Unchanged')).toHaveText('1', { timeout: 5_000 })
+  await expect(kpi(page, 'Unchanged')).toHaveText('1')
+  await expect(kpi(page, 'New students')).toHaveText('1')
+  await expect(page.getByText('Only in Two: Bo (A)')).toBeVisible()
+  await expect(page.getByRole('rowheader', { name: 'Bo', exact: true })).toHaveCount(0)
 })
 
 test.fail('#13 the mapping download keeps item tags', async ({ page }) => {
