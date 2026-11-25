@@ -50,7 +50,7 @@ export default function Docs() {
       <ol>
         <li>In the course, open <b>Grades</b>.</li>
         <li>Click <b>Export</b> and choose <b>Export Entire Gradebook</b>. Canvas builds a CSV and downloads it.</li>
-        <li>Drop the CSV in. The <b>Points Possible</b> row sets each assessment&rsquo;s maximum, the numeric suffix on assignment names (&ldquo;Unit 1 Quiz (48213)&rdquo;) is removed, &ldquo;Last, First&rdquo; becomes &ldquo;First Last&rdquo;, and Current/Final/Unposted/Override columns (including assignment-group and grading-period totals) are ignored.</li>
+        <li>Drop the CSV in. The <b>Points Possible</b> row sets each assessment&rsquo;s maximum, the numeric suffix on assignment names (&ldquo;Unit 1 Quiz (48213)&rdquo;) is removed unless two assignments share a name, &ldquo;Last, First&rdquo; becomes &ldquo;First Last&rdquo;, and Current/Final/Unposted/Override columns (including assignment-group and grading-period totals) are ignored.</li>
         <li>Also handled: the <b>Manual Posting</b> row, custom gradebook columns such as Notes, the separate LastName/FirstName layout, <b>EX</b> and <b>N/A</b> (not counted), Canvas&rsquo;s Test Student, and semicolon files with decimal commas from non-US locales.</li>
         <li>Canvas exports have no due dates. Column order is used as time order until you add dates on the Assessments panel or in a mapping file. Time order matters for most recent, decaying average and power law.</li>
       </ol>
