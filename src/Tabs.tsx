@@ -28,10 +28,10 @@ function Gradebook({ project, ds, cfg, a }: TabProps) {
   const descs = useDescs(m.standards, ds)
   const growth = useMemo(() => classGrowth(ds, cfg), [ds, cfg])
   const flat = m.cells.flat().filter(Boolean)
-  const share = flat.length ? flat.filter(c => c!.level >= cfg.scale.proficient).length / flat.length : 0
+  const share = flat.length ? flat.filter(c => c!.level >= cfg.scale.proficient).length / flat.length : NaN
   const perStd = m.standards.map((code, j) => {
     const cs = m.cells.map(r => r[j]).filter(Boolean)
-    return { code, n: cs.length, share: cs.length ? cs.filter(c => c!.level >= cfg.scale.proficient).length / cs.length : 0 }
+    return { code, n: cs.length, share: cs.length ? cs.filter(c => c!.level >= cfg.scale.proficient).length / cs.length : NaN }
   })
   const weak = perStd.filter(s => s.share < 0.6).length
   const reassessed = flat.filter(c => c!.dropped.length).length
@@ -65,7 +65,7 @@ function Gradebook({ project, ds, cfg, a }: TabProps) {
             {perStd.map(s => (
               <li key={s.code}>
                 <div className="row between gap"><span><b className="mono">{s.code}</b> <span className="muted small">{descs[s.code]}</span></span><b className="tab-nums">{fmtPct(s.share)}</b></div>
-                <div className="share"><span className={s.share < 0.6 ? 'over' : ''} style={{ width: `${s.share * 100}%` }} /></div>
+                <div className="share">{s.n > 0 && <span className={s.share < 0.6 ? 'over' : ''} style={{ width: `${s.share * 100}%` }} />}</div>
               </li>
             ))}
           </ul>
@@ -213,7 +213,7 @@ function Reteach({ project, ds, cfg, a, setConfig }: TabProps) {
         </div>
         {g.k > g.requestedK && <p className="warn-text small">{g.requestedK} groups of {cfg.groups.maxSize} cannot hold everyone who needs reteaching, so this makes {g.k}.</p>}
       </div>
-      {g.groups.length === 0 ? <Empty title="Nobody needs reteaching">Every student is at {levelInfo(cfg.scale.proficient, cfg.scale).label} or above on every assessed standard.</Empty> : (
+      {g.groups.length === 0 ? g.onTrack.length === 0 ? <Empty title="No evidence yet">Nobody has a score on a tagged standard, so there is nothing to group by.</Empty> : <Empty title="Nobody needs reteaching">Every student with evidence is at {levelInfo(cfg.scale.proficient, cfg.scale).label} or above on every standard they were assessed on.</Empty> : (
         <div className="group-grid">
           {g.groups.map(grp => (
             <article key={grp.id} className="group-card">
@@ -239,7 +239,8 @@ function Reteach({ project, ds, cfg, a, setConfig }: TabProps) {
           ))}
         </div>
       )}
-      {g.onTrack.length > 0 && <div className="panel tint"><h2>On track ({g.onTrack.length})</h2><p className="small">{g.onTrack.map(s => displayName(s)).join(', ')}</p><p className="muted small" style={{ margin: 0 }}>At {levelInfo(cfg.scale.proficient, cfg.scale).label} or above everywhere. Good candidates for extension tasks or peer tutoring while groups meet.</p></div>}
+      {g.onTrack.length > 0 && <div className="panel tint"><h2>On track ({g.onTrack.length})</h2><p className="small">{g.onTrack.map(s => displayName(s)).join(', ')}</p><p className="muted small" style={{ margin: 0 }}>At {levelInfo(cfg.scale.proficient, cfg.scale).label} or above on every standard they were assessed on. Good candidates for extension tasks or peer tutoring while groups meet.</p></div>}
+      {g.noEvidence.length > 0 && <div className="panel"><h2>No evidence yet ({g.noEvidence.length})</h2><p className="small">{g.noEvidence.map(s => displayName(s)).join(', ')}</p><p className="muted small" style={{ margin: 0 }}>No score on any standard, so there is no telling yet whether they need reteaching.</p></div>}
       <p className="muted small">Practice links open a Khan Academy search for the standard&rsquo;s topic. Nothing is fetched from Khan Academy by this app.</p>
     </>
   )
@@ -256,7 +257,7 @@ function Students({ project, ds, cfg, a, sid }: TabProps) {
   const pick = (id: string) => go(`/app/p/${project.id}/students?s=${id}`, { replace: true, keepScroll: true })
   const text = [
     `${displayName(cur)}: ${x.grade.letter}`,
-    `${x.grade.nMet} of ${x.grade.nAssessed} standards at ${levelInfo(cfg.scale.proficient, cfg.scale).label} or above (${fmtPct(x.grade.share)}).`,
+    x.grade.nAssessed ? `${x.grade.nMet} of ${x.grade.nAssessed} standards at ${levelInfo(cfg.scale.proficient, cfg.scale).label} or above (${fmtPct(x.grade.share)}).` : 'No evidence on any standard yet.',
     `Grading rule: ${x.ruleText}.`,
     ...x.standards.map(s => `${s.code}: ${s.steps}`),
     x.next ?? '',
@@ -281,7 +282,7 @@ function Students({ project, ds, cfg, a, sid }: TabProps) {
             </div>
             <div className={`big-letter g-${x.grade.letter}`}>{x.grade.letter}</div>
           </div>
-          <p className="lede-sm"><b>{x.grade.nMet} of {x.grade.nAssessed}</b> standards are at {levelInfo(cfg.scale.proficient, cfg.scale).label} or above ({fmtPct(x.grade.share)}){x.grade.lowest !== null ? <>; the lowest is level {x.grade.lowest}</> : null}. {cfg.grading.mode === 'average' && <>Average level {Math.round(x.grade.avg * 100) / 100}. </>}Under the class rule that is {x.grade.letter}.</p>
+          {!x.grade.nAssessed ? <p className="lede-sm">No evidence on any standard yet, so there is no grade.</p> : <p className="lede-sm"><b>{x.grade.nMet} of {x.grade.nAssessed}</b> standards are at {levelInfo(cfg.scale.proficient, cfg.scale).label} or above ({fmtPct(x.grade.share)}){x.grade.lowest !== null ? <>; the lowest is level {x.grade.lowest}</> : null}. {cfg.grading.mode === 'average' && <>Average level {Math.round(x.grade.avg * 100) / 100}. </>}Under the class rule that is {x.grade.letter}.</p>}
           <p className="muted small">Rule ({cfg.grading.mode === 'share' ? 'share of standards met' : 'average level'}): {x.ruleText}. Method: {methodLabel(cfg.method, cfg)}.</p>
           {x.next && <div className="banner good"><span><strong>Next step.</strong> {x.next}</span></div>}
           <div className="row gap wrap"><CopyButton text={text} label="Copy explanation" /><Link className="btn sm primary" href={`/app/p/${project.id}/report?s=${cur.id}`}>Family report</Link></div>
