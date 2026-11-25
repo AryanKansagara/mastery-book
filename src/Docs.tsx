@@ -75,7 +75,7 @@ export default function Docs() {
       <Code code={LONG} label="scores.csv" />
       <ul>
         <li>Scores can be points (<code>8</code>), fractions (<code>8/10</code>) or percents (<code>80%</code>). <code>1,250</code> is 1250, except in files separated by semicolons, where a comma is the decimal mark. Negative numbers are reported and not counted, and scores above 150% of the points possible get a warning. If you score directly on the 1 to 4 scale, set <b>Scores are: already proficiency levels</b> in Grading setup (detected automatically when every assessment is out of 4 or 5).</li>
-        <li><code>Missing</code>, <code>M</code> and <code>Absent</code> are not counted as evidence: a missing assessment is not a zero on a standard. <code>EX</code> and <code>Excused</code> are ignored. Both are counted in the validation report.</li>
+        <li><code>Missing</code>, <code>M</code> and <code>Absent</code> are not counted as evidence: a missing assessment is not a zero on a standard. <code>EX</code> and <code>Excused</code> are not counted either. Both are counted in the validation report, and re-importing a score that became excused or missing removes it; an empty cell keeps the earlier score.</li>
         <li>Dates: <code>2026-09-15</code>, <code>9/15/2026</code> or <code>Sep 15, 2026</code>. Excel files: save as CSV first.</li>
       </ul>
 
