@@ -29,3 +29,7 @@ export function findStandard(code: string, custom: { code: string; desc: string 
   const parent = /^(.*\d)[a-f]$/.test(code) ? byCode.get(code.slice(0, -1).toUpperCase()) : undefined
   return parent && { ...parent, code }
 }
+
+/** The standards an item is tagged with. */
+export const itemCodes = (items: Record<string, string> | undefined, item: string): string[] =>
+  items && Object.hasOwn(items, item) ? items[item].split(';').map(x => x.trim()).filter(Boolean) : []

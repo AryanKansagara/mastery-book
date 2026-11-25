@@ -1,4 +1,4 @@
-import { normalizeCode } from './standards.ts'
+import { itemCodes, normalizeCode } from './standards.ts'
 import type { Assessment, Dataset, ItemScore, Score, Student } from './types.ts'
 
 export interface Csv {
@@ -308,7 +308,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       const item = text(r, map.item)
       const m = rows.get(id) ?? { assessment: name, id, ...(src ? { src } : {}), standards: [], items: {} }
       for (const c of codes) if (!m.standards.includes(c)) m.standards.push(c)
-      if (item && codes[0]) m.items[item] = codes[0]
+      if (item && codes.length) m.items[item] = [...new Set([...itemCodes(m.items, item), ...codes])].join('; ')
       if (item && !codes.length) issues.push({ line, level: 'warn', message: `Item "${item}" has no standard tag.` })
       const d = cell(r, map.date)
       if (d) { const p = parseDate(d); if (p) m.date = p; else issues.push({ line, level: 'warn', message: `Could not read the date "${d}". Use YYYY-MM-DD.` }) }

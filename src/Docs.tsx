@@ -85,7 +85,7 @@ export default function Docs() {
       <ul>
         <li>Codes are normalized: <code>7.EE.1</code>, <code>CCSS.MATH.CONTENT.7.EE.A.1</code> and <code>7.EE.A.1</code> are the same standard. High school codes like <code>HSA-REI.B.3</code> become <code>A-REI.B.3</code>.</li>
         <li><b>reassessment of</b> links a retake to the original. The class rule decides what happens: the retake replaces the original (default), the higher score stands, the two are averaged, or both count.</li>
-        <li><b>item</b> tags a question to a standard, so an item scores file can give each standard its own score on a multi-standard test.</li>
+        <li><b>item</b> tags a question to a standard (or several, and its score then counts for each), so an item scores file can give each standard its own score on a multi-standard test.</li>
       </ul>
 
       <h2 id="items">Item scores per standard (optional)</h2>

@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { assessmentColumns, autoMap, detectKind, FIELD_LABEL, FIELDS_FOR, importEffects, isWide, KINDS, mergeDataset, parseCsv, toCsv, validate, withMax, type Csv, type Kind, type Mapping, type Validation } from './engine/csv.ts'
 import { chronological, SCALES, standardsInUse } from './engine/mastery.ts'
 import { detectScoreMode, notLevels } from './engine/scoremode.ts'
-import { CCSS, normalizeCode } from './engine/standards.ts'
+import { CCSS, itemCodes, normalizeCode } from './engine/standards.ts'
 import { emptyDataset, type Assessment, type Config, type Dataset, type GradeRule } from './engine/types.ts'
 import { createBlankProject, displayName, stdDesc } from './projectData.ts'
 import { putData, saveProject, uuid, type Project } from './store.ts'
@@ -287,7 +287,12 @@ export function gradebookCsv(ds: Dataset): string {
 }
 export function mappingCsv(ds: Dataset): string {
   const byId = new Map(ds.assessments.map(a => [a.id, a.name]))
-  return toCsv([['assessment', 'standards', 'date', 'points possible', 'reassessment of'], ...sorted(ds).map(a => [a.name, a.standards.join('; '), a.date, a.max, a.reassessOf ? byId.get(a.reassessOf) ?? '' : ''])])
+  const tagged = ds.assessments.some(a => Object.keys(a.items ?? {}).length)
+  const item = (label: string) => tagged ? [label] : []
+  return toCsv([['assessment', 'standards', ...item('item'), 'date', 'points possible', 'reassessment of'], ...sorted(ds).flatMap(a => [
+    [a.name, a.standards.join('; '), ...item(''), a.date, a.max, a.reassessOf ? byId.get(a.reassessOf) ?? '' : ''],
+    ...Object.keys(a.items ?? {}).map(i => [a.name, itemCodes(a.items, i).join('; '), i, '', '', '']),
+  ])])
 }
 export function scoresCsv(ds: Dataset): string {
   const names = new Map(ds.students.map(s => [s.id, displayName(s)]))

@@ -39,7 +39,7 @@ export interface Assessment {
   fileMax?: number
   standards: string[]
   reassessOf?: string
-  /** Item tags: item label -> standard code */
+  /** Item tags: item label -> standard code, or several joined by ";" */
   items?: Record<string, string>
 }
 

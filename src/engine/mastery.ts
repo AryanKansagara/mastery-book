@@ -1,3 +1,4 @@
+import { itemCodes } from './standards.ts'
 import type { Assessment, Config, Dataset, Evidence, GradeRule, Method, ReassessRule, Scale } from './types.ts'
 
 // ---------- Scales ----------
@@ -148,11 +149,11 @@ export function evidenceFor(ds: Dataset, cfg: Config): Map<string, Map<string, E
   const place = new Map(chronological(ds.assessments).map((a, i) => [a.id, i]))
   const items = new Map<string, { pts: number; max: number }>()
   for (const it of ds.itemScores) {
-    const std = it.std || (it.item ? aById.get(it.a)?.items?.[it.item] : undefined)
-    if (!std) continue
-    const k = `${it.s}|${it.a}|${std}`
-    const cur = items.get(k) ?? { pts: 0, max: 0 }
-    items.set(k, { pts: cur.pts + it.pts, max: cur.max + it.max })
+    for (const std of it.std ? [it.std] : it.item ? itemCodes(aById.get(it.a)?.items, it.item) : []) {
+      const k = `${it.s}|${it.a}|${std}`
+      const cur = items.get(k) ?? { pts: 0, max: 0 }
+      items.set(k, { pts: cur.pts + it.pts, max: cur.max + it.max })
+    }
   }
   const lo = scaleMin(cfg.scale), hi = scaleMax(cfg.scale)
   // Level mode: a score of 3 out of 4 is level 3; summed item levels (7 of 8) average out to 3.5.

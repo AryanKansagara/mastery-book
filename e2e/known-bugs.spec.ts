@@ -149,12 +149,26 @@ test('#12 a new student is not "unchanged"', async ({ page }) => {
   await expect(page.getByRole('rowheader', { name: 'Bo', exact: true })).toHaveCount(0)
 })
 
-test.fail('#13 the mapping download keeps item tags', async ({ page }) => {
+test('#13 the mapping download keeps item tags', async ({ page }) => {
   await newClass(page)
   await importFile(page, 'scores.csv', 'Student,Unit 1\nPoints Possible,20\nAda,14\n')
   await importFile(page, 'mapping.csv', 'assessment,standard,item\nUnit 1,7.EE.A.1,Q1\nUnit 1,7.EE.B.4,Q2\n')
   const f = await saved(page, () => page.getByRole('button', { name: 'Download mapping CSV' }).click())
-  expect(f.text).toMatch(/Q1/)
+  await newClass(page)
+  await importFile(page, 'scores.csv', 'Student,Unit 1\nPoints Possible,20\nAda,14\n')
+  await importFile(page, 'mapping.csv', f.text.replace(/^\uFEFF/, ''))
+  await expect(page.getByText('2 tagged items')).toBeVisible()
+  await importFile(page, 'items.csv', 'student,assessment,item,score,max\nAda,Unit 1,Q1,9,10\nAda,Unit 1,Q2,5,10\n')
+  await tab(page, 'Gradebook')
+  expect(await levels(page, 'Ada')).toEqual(['4', '1', 'D'])
+})
+
+test('#13 an item with two standards counts for both', async ({ page }) => {
+  await newClass(page)
+  await importFile(page, 'mapping.csv', 'assessment,standard,item\nT,7.EE.A.1; 7.EE.B.4,Q1\n')
+  await importFile(page, 'items.csv', 'student,assessment,item,score,max\nAda,T,Q1,9,10\n')
+  await tab(page, 'Gradebook')
+  expect(await levels(page, 'Ada')).toEqual(['4', '4', 'A'])
 })
 
 test('#14 an ID-only item file keeps student names', async ({ page }) => {
