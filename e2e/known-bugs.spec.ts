@@ -88,16 +88,17 @@ test('#8 no evidence is neither on track nor 0%', async ({ page }) => {
   await expect(page.locator('.std-list li').filter({ hasText: '7.EE.B.4' }).locator('.tab-nums')).toHaveText('—')
 })
 
-test.fail('#9 a comma in a semicolon file is a decimal mark', async ({ page }) => {
+test('#9 a comma in a semicolon file is a decimal mark', async ({ page }) => {
   await classWith(page, 'Student;Quiz 1\nPoints Possible;10\nAda;6,333\n', 'assessment,standard\nQuiz 1,7.EE.A.1\n')
   // 6.333 of 10 = 63% = 2
   expect((await levels(page, 'Ada'))[0]).toBe('2')
 })
 
-test.fail('#9 a negative score is not evidence', async ({ page }) => {
+test('#9 a negative score is not evidence', async ({ page }) => {
   await newClass(page)
   await choose(page, { name: 'n.csv', text: 'Student,Quiz 1\nPoints Possible,10\nAda,9\nBo,-3\n' })
   await expect(pending(page, 'n.csv')).toContainText('1 scores')
+  await expect(pending(page, 'n.csv')).toContainText('"-3" under "Quiz 1" is not a score; ignored.')
 })
 
 test.fail('#10 a name that looks like a formula is exported as text', async ({ page }) => {
