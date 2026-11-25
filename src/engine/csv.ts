@@ -310,11 +310,11 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
         if (p.kind === 'missing') { missing++; continue }
         if (p.kind === 'excused') { excused++; continue }
         if (p.kind === 'bad') { issues.push({ line, level: 'warn', message: `"${cell(r, c)}" under "${a.name}" is not a score; ignored.` }); continue }
-        if (p.kind === 'pct') { scores.push({ s: st.id, a: a.id, pts: p.pct * (a.max || 100) }); if (!a.max) a.max = 100 }
+        if (p.kind === 'pct') { if (!a.max) { a.max = 100; a.maxAssumed = true } scores.push({ s: st.id, a: a.id, pts: p.pct * a.max, max: a.max }) }
         else {
           if (p.max && !a.max) a.max = p.max
           // "7/8" in a column whose maximum is already known from another format is rescaled to that maximum.
-          scores.push({ s: st.id, a: a.id, pts: p.max && a.max !== p.max ? p.pts / p.max * a.max : p.pts })
+          scores.push({ s: st.id, a: a.id, pts: p.max && a.max !== p.max ? p.pts / p.max * a.max : p.pts, ...(p.max ? { max: a.max } : {}) })
         }
         any = true
       }
@@ -329,11 +329,15 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
     for (const a of assessments.values()) if (!a.max) {
       const top = Math.max(0, ...scores.filter(s => s.a === a.id).map(s => s.pts))
       a.max = top <= 4 ? 4 : top <= 10 ? 10 : 100
+      a.maxAssumed = true
       issues.push({ line: csv.lines[0] ?? 1, level: 'warn', message: `No points possible for "${a.name}"; assumed ${a.max}. Edit it on the Assessments panel if that is wrong.` })
     }
     if (!metaDates.size && cols.length) issues.push({ line: csv.lines[0] ?? 1, level: 'warn', message: 'The export has no dates, so column order is used as time order. Add dates on the Assessments panel or with a mapping file.' })
   } else {
     let order = 0
+    const given = new Set<string>()
+    // Per score: plain points, which follow the assessment's points possible when that is what they were out of.
+    const raw: boolean[] = []
     for (const { r, line } of body) {
       const st = studentFrom(r, map, kind)
       if (!st) { issues.push({ line, level: 'error', message: 'No student name or ID; row skipped.' }); continue }
@@ -345,14 +349,16 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       if (p.kind === 'excused') { excused++; continue }
       if (p.kind === 'bad') { issues.push({ line, level: 'error', message: `"${cell(r, map.score)}" is not a score; row skipped.` }); continue }
       const mxRaw = cell(r, map.max)
-      const mx = mxRaw ? num(mxRaw) : p.kind === 'pts' ? p.max ?? NaN : 100
-      if (mxRaw && !(mx > 0)) { issues.push({ line, level: 'error', message: `Points possible "${mxRaw}" is not a positive number; row skipped.` }); continue }
+      // A fraction is out of its own total whatever the points column says.
+      const own = p.kind === 'pts' && p.max ? p.max : 0
+      const mx = own || (mxRaw ? num(mxRaw) : p.kind === 'pts' ? NaN : 100)
+      if (mxRaw && !(num(mxRaw) > 0)) { issues.push({ line, level: 'error', message: `Points possible "${mxRaw}" is not a positive number; row skipped.` }); continue }
       const id = assessmentId(name)
       const dRaw = cell(r, map.date), d = dRaw ? parseDate(dRaw) : ''
       if (dRaw && !d) issues.push({ line, level: 'warn', message: `Could not read the date "${dRaw}". Use YYYY-MM-DD.` })
       const a = assessments.get(id) ?? { id, name, date: '', order: order++, max: 0, standards: [] }
       if (d && !a.date) a.date = d
-      if (mx > 0 && kind !== 'items') a.max = Math.max(a.max, mx)
+      if (mx > 0 && kind !== 'items') { if (mxRaw || own) given.add(id); a.max = Math.max(a.max, mx) }
       assessments.set(id, a)
       students.set(st.id, withKnownName(students.get(st.id), st))
       const pts = p.kind === 'pct' ? p.pct * (mx > 0 ? mx : 100) : p.pts
@@ -364,10 +370,12 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
         if (!(max > 0)) { issues.push({ line, level: 'error', message: 'Item scores need points possible; row skipped.' }); continue }
         if (codes.length) for (const c of codes) { itemScores.push({ s: st.id, a: id, std: c, pts, max, ...(item ? { item: codes.length > 1 ? `${item}:${c}` : item } : {}) }); if (!a.standards.includes(c)) a.standards.push(c) }
         else itemScores.push({ s: st.id, a: id, std: '', pts, max, item })
-      } else scores.push({ s: st.id, a: id, pts })
+      } else scores.push({ s: st.id, a: id, pts, ...(mx > 0 ? { max: mx } : {}) }), raw.push(p.kind === 'pts' && !own)
       used++
     }
-    for (const a of assessments.values()) if (!a.max && kind !== 'items') { a.max = 100; issues.push({ line: 0, level: 'warn', message: `No points possible for "${a.name}"; assumed 100.` }) }
+    scores.forEach((x, i) => { if (raw[i] && x.max === assessments.get(x.a)!.max) delete x.max })
+    for (const a of assessments.values()) if (a.max && !given.has(a.id)) a.maxAssumed = true
+    for (const a of assessments.values()) if (!a.max && kind !== 'items') { a.max = 100; a.maxAssumed = true; issues.push({ line: 0, level: 'warn', message: `No points possible for "${a.name}"; assumed 100.` }) }
   }
   if (missing) issues.push({ line: 0, level: 'warn', message: `${missing} "missing" marks are not counted as evidence (a missing assessment is not a 0 on a standard). Chase those separately.` })
   if (excused) issues.push({ line: 0, level: 'warn', message: `${excused} excused marks ignored.` })
@@ -381,25 +389,36 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
 
 // ---------- Merging ----------
 
+/** Points possible stated by the teacher, on the panel or in a mapping file. */
+export const withMax = (a: Assessment, max: number): Pick<Assessment, 'max' | 'maxAssumed' | 'fileMax'> => ({ max, maxAssumed: undefined, fileMax: a.fileMax ?? (a.max && !a.maxAssumed && a.max !== max ? a.max : undefined) })
+
 /** Merges an imported part into a dataset. Re-importing the same file updates scores instead of duplicating them. */
 export function mergeDataset(base: Dataset, part: Validation['part']): Dataset {
   const students = new Map(base.students.map(s => [s.id, s]))
   for (const s of part.students ?? []) students.set(s.id, withKnownName(students.get(s.id), s))
   const assessments = new Map(base.assessments.map(a => [a.id, { ...a }]))
   let order = Math.max(-1, ...base.assessments.map(a => a.order)) + 1
+  const oldMax = new Map<string, number>()
   for (const a of part.assessments ?? []) {
     const cur = assessments.get(a.id)
-    if (cur) assessments.set(a.id, { ...cur, date: a.date || cur.date, max: cur.max || a.max, standards: [...new Set([...cur.standards, ...a.standards])] })
-    else assessments.set(a.id, { ...a, order: order++ })
+    if (cur) {
+      const given = a.max > 0 && !a.maxAssumed
+      // The file now states another total. Plain points already here keep the one they were entered against.
+      const changed = given && cur.max > 0 && a.max !== cur.max && a.max !== cur.fileMax
+      if (changed && !cur.maxAssumed) oldMax.set(a.id, cur.max)
+      const { maxAssumed, fileMax, ...rest } = cur
+      const points = changed || !cur.max ? { max: a.max, ...(a.maxAssumed ? { maxAssumed: true } : {}) } : { max: cur.max, ...(maxAssumed && !given ? { maxAssumed } : {}), ...(fileMax ? { fileMax } : {}) }
+      assessments.set(a.id, { ...rest, ...points, date: a.date || cur.date, standards: [...new Set([...cur.standards, ...a.standards])] })
+    } else assessments.set(a.id, { ...a, order: order++ })
   }
   for (const m of part.mapping ?? []) {
     const id = assessmentId(m.assessment)
     const cur = assessments.get(id) ?? { id, name: m.assessment, date: '', order: order++, max: 0, standards: [] }
     const re = m.reassessOf ? assessmentId(m.reassessOf) : cur.reassessOf
-    assessments.set(id, { ...cur, standards: [...new Set([...cur.standards, ...m.standards])], items: { ...cur.items, ...m.items }, date: m.date ?? cur.date, max: m.max ?? cur.max, ...(re ? { reassessOf: re } : {}) })
+    assessments.set(id, { ...cur, standards: [...new Set([...cur.standards, ...m.standards])], items: { ...cur.items, ...m.items }, date: m.date ?? cur.date, ...(m.max ? withMax(cur, m.max) : {}), ...(re ? { reassessOf: re } : {}) })
   }
   const key = (s: Score) => `${s.s}|${s.a}`
-  const scores = new Map(base.scores.map(s => [key(s), s]))
+  const scores = new Map(base.scores.map(s => [key(s), !s.max && oldMax.has(s.a) ? { ...s, max: oldMax.get(s.a) } : s]))
   for (const s of part.scores ?? []) scores.set(key(s), s)
   // Item rows are keyed by item label when there is one, so re-importing the same file replaces instead of adding.
   const ikey = (s: ItemScore) => `${s.s}|${s.a}|${s.item ? '#' + s.item : s.std}`

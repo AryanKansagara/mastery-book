@@ -38,14 +38,14 @@ test.fail('#4 a repeated student and assessment in a list is reported', async ({
   await expect(pending(page, 'l.csv')).toContainText('line 2')
 })
 
-test.fail('#5 each score keeps its own points possible', async ({ page }) => {
+test('#5 each score keeps its own points possible', async ({ page }) => {
   await classWith(page, 'student id,student name,assessment,score,points possible\n1,Ada,Quiz,8,10\n2,Bo,Quiz,16,20\n', 'assessment,standard\nQuiz,7.EE.A.1\n')
   // 8/10 and 16/20 are both 80%.
   expect((await levels(page, 'Ada'))[0]).toBe('3')
   expect((await levels(page, 'Bo'))[0]).toBe('3')
 })
 
-test.fail('#5 a percent stays a percent when points possible arrive later', async ({ page }) => {
+test('#5 a percent stays a percent when points possible arrive later', async ({ page }) => {
   await classWith(page, 'Student,Quiz\nAda,80%\n', 'assessment,standard,points possible\nQuiz,7.EE.A.1,40\n')
   expect((await levels(page, 'Ada'))[0]).toBe('3')
 })
