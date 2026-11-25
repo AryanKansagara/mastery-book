@@ -129,7 +129,7 @@ test.fail('#13 the mapping download keeps item tags', async ({ page }) => {
   expect(f.text).toMatch(/Q1/)
 })
 
-test.fail('#14 an ID-only item file keeps student names', async ({ page }) => {
+test('#14 an ID-only item file keeps student names', async ({ page }) => {
   await classWith(page, 'student id,student name,assessment,score,points possible\nS1,Ada Okafor,Unit 1,14,20\n', 'assessment,standard,item\nUnit 1,7.EE.A.1,Q1\n')
   await tab(page, 'Data & setup')
   await importFile(page, 'items.csv', 'student id,assessment,item,score,max\nS1,Unit 1,Q1,9,10\n')
