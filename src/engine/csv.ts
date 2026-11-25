@@ -1,22 +1,33 @@
 import { normalizeCode } from './standards.ts'
 import type { Assessment, Dataset, ItemScore, Score, Student } from './types.ts'
 
-export interface Csv { rows: string[][]; lines: number[] }
+export interface Csv {
+  rows: string[][]
+  lines: number[]
+  /** Line where a quote starts that is never closed properly */
+  badQuote?: number
+  /** The last row ends without a line end */
+  openEnd?: boolean
+}
 
 export function parseCsv(text: string): Csv {
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1)
   const delim = sniffDelimiter(text)
   const rows: string[][] = []
   const lines: number[] = []
-  let row: string[] = [], field = '', quoted = false, line = 1, rowLine = 1
+  let row: string[] = [], field = '', quoted = false, line = 1, rowLine = 1, quoteLine = 0, badQuote = 0
   for (let i = 0; i < text.length; i++) {
     const c = text[i]
     if (quoted) {
-      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++ } else quoted = false }
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++ } else {
+        quoted = false
+        // Text right after a quote that spanned lines means an earlier quote was left open and this one opened a field.
+        if (line > quoteLine && /[^\s,;\t]/.test(text[i + 1] ?? '')) badQuote ||= quoteLine
+      } }
       else { if (c === '\n') line++; field += c }
       continue
     }
-    if (c === '"' && field.trim() === '') { quoted = true; field = '' }
+    if (c === '"' && field.trim() === '') { quoted = true; field = ''; quoteLine = line }
     else if (c === delim) { row.push(field.trim()); field = '' }
     else if (c === '\n' || c === '\r') {
       if (c === '\r' && text[i + 1] === '\n') i++
@@ -26,7 +37,8 @@ export function parseCsv(text: string): Csv {
     } else field += c
   }
   if (field !== '' || row.length) { row.push(field.trim()); if (row.some(x => x !== '')) { rows.push(row); lines.push(rowLine) } }
-  return { rows, lines }
+  if (quoted) badQuote ||= quoteLine
+  return { rows, lines, ...(badQuote ? { badQuote } : {}), ...(text && !/[\r\n]$/.test(text) ? { openEnd: true } : {}) }
 }
 
 function sniffDelimiter(text: string): string {
@@ -158,6 +170,19 @@ export function detectKind(headers: string[], rows: string[][] = []): Kind {
 const NOT_ASSESSMENT = /^(last ?name|first ?name|email( address)?|student|id|sis (user|login) id|integration id|root account|section|student name|name|student id|student number|overall( grade)?|total|average( score)?|status|.*\b(current|final|unposted) (score|grade|points)\b.*|override (score|grade|status)\b.*|grade|period|class)$/i
 const META_ROW = /^(points possible|points|out of|max(imum)?|date|due( date)?|class average|average|manual posting|read only)$/i
 
+/** "Max" and "Date" are also people's names, so a row with such a label is a student when anything else in it says so. */
+function isStudentRow(rows: string[][], at: number, label: string, map: Mapping, cols: number[]): boolean {
+  if (!/^(max|date)$/i.test(label)) return false
+  const r = rows[at]
+  const ids = [map.sid, map.name, map.first, map.last].map(i => cell(r, i)).filter(x => /[\p{L}\p{N}]/u.test(x))
+  if (ids.some(x => !META_ROW.test(x))) return true
+  // "Max" alone in a name column: a points row sits above every student, is the only such row and is not far below other scores (extra credit may pass it).
+  if (!/^max$/i.test(label)) return false
+  const isPoints = (x: string[]) => /^(points possible|points|out of|maximum)$/i.test((x[0] ?? '').trim())
+  if (rows.slice(0, at).some(x => !META_ROW.test((x[0] ?? '').trim())) || rows.some(isPoints)) return true
+  return cols.some(c => { const top = num(cell(r, c)); return rows.some((x, i) => i > at && num(cell(x, c)) > top * 1.25) })
+}
+
 export function assessmentColumns(csv: Csv, map: Mapping): number[] {
   const head = csv.rows[0] ?? []
   const used = new Set(Object.values(map))
@@ -187,13 +212,25 @@ function studentFrom(r: string[], map: Mapping, kind: Kind): { id: string; name:
   return { id: studentId(key), name: name || key, ...(section ? { section } : {}) }
 }
 
+/** A student whose file had no name is called by their ID; that never replaces a name already known. */
+const namedOnlyById = (s: Student) => studentId(s.name) === s.id
+const withKnownName = (cur: Student | undefined, s: Student): Student => cur?.name && namedOnlyById(s) && !namedOnlyById(cur) ? { ...cur, ...s, name: cur.name } : { ...cur, ...s, name: s.name || cur?.name || s.id }
+
 /** Validates and converts one parsed file. Line numbers are 1-based lines in the original file. */
 export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number[]): Validation {
   const issues: Issue[] = []
   const head = csv.rows[0] ?? []
-  const body = csv.rows.slice(1).map((r, i) => ({ r, line: csv.lines[i + 1] }))
+  const all = csv.rows.slice(1).map((r, i) => ({ r, line: csv.lines[i + 1] }))
+  if (csv.badQuote) return { part: {}, issues: [{ line: csv.badQuote, level: 'error', message: 'The quote that starts on this line is never closed, so the rows after it cannot be told apart. Fix the quote or export the file again.' }], rows: all.length, used: 0, skipped: all.length, summary: 'Broken quoting' }
   for (const { f, req } of FIELDS_FOR[kind]) if (req && (map[f] === undefined || map[f]! < 0)) issues.push({ line: csv.lines[0] ?? 1, level: 'error', message: `Map a column to "${FIELD_LABEL[f]}" to continue.` })
-  if (issues.length) return { part: {}, issues, rows: body.length, used: 0, skipped: body.length, summary: 'Column mapping incomplete' }
+  if (issues.length) return { part: {}, issues, rows: all.length, used: 0, skipped: all.length, summary: 'Column mapping incomplete' }
+  const body = all.filter(({ r, line }, i) => {
+    if (r.slice(head.length).some(x => x && !/^\(read only\)$/i.test(x))) { issues.push({ line, level: 'error', message: `This row has ${r.length} values but the header has ${head.length} columns, so they cannot be matched up (a comma inside a name or number needs quotes); row skipped.` }); return false }
+    // A file that leaves out trailing empty cells elsewhere may do so on its last row too.
+    const cut = csv.openEnd && i === all.length - 1 && r.length < head.length && all.slice(0, -1).every(x => x.r.length >= head.length)
+    if (cut) issues.push({ line, level: 'error', message: `The file ends in the middle of this row (${r.length} of ${head.length} columns); row skipped. Export it again.` })
+    return !cut
+  })
 
   if (kind === 'standards') {
     const out: { code: string; desc: string }[] = []
@@ -202,7 +239,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       if (!code) { issues.push({ line, level: 'error', message: 'No standard code; row skipped.' }); continue }
       out.push({ code, desc: desc || code })
     }
-    return { part: { customStandards: out }, issues, rows: body.length, used: out.length, skipped: body.length - out.length, summary: `${out.length} standards` }
+    return { part: { customStandards: out }, issues, rows: all.length, used: out.length, skipped: all.length - out.length, summary: `${out.length} standards` }
   }
 
   if (kind === 'mapping') {
@@ -228,7 +265,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       used++
     }
     for (const m of rows.values()) if (m.reassessOf && !rows.has(m.reassessOf.toLowerCase())) issues.push({ line: 0, level: 'warn', message: `"${m.assessment}" is a reassessment of "${m.reassessOf}", which is not in this file. It will link if that assessment is already imported.` })
-    return { part: { mapping: [...rows.values()] }, issues, rows: body.length, used, skipped: body.length - used, summary: `${rows.size} assessments, ${new Set([...rows.values()].flatMap(m => m.standards)).size} standards` }
+    return { part: { mapping: [...rows.values()] }, issues, rows: all.length, used, skipped: all.length - used, summary: `${rows.size} assessments, ${new Set([...rows.values()].flatMap(m => m.standards)).size} standards` }
   }
 
   const students = new Map<string, Student>()
@@ -242,10 +279,10 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
     if (!cols.length) issues.push({ line: csv.lines[0] ?? 1, level: 'error', message: 'No assessment columns found. Choose them below.' })
     // Meta rows (Points Possible, Date, Class average) come right after the header in Canvas and Google Classroom exports.
     const metaPoints = new Map<number, number>(), metaDates = new Map<number, string>()
-    const students_ = body.filter(({ r }) => {
+    const students_ = body.filter(({ r }, at) => {
       if (r.some(x => /^manual posting/i.test(x.trim()))) return false
       const first = (r[0] ?? '').trim(), probe = r.slice(0, 4).map(x => x.trim()).find(x => META_ROW.test(x)) ?? (META_ROW.test(first) ? first : '')
-      if (!probe) return true
+      if (!probe || isStudentRow(body.map(b => b.r), at, probe, map, cols)) return true
       for (const c of cols) {
         const v = cell(r, c)
         if (/points|out of|max/i.test(probe)) { const p = parseScore(v); if (p.kind === 'pts' && p.pts > 0) metaPoints.set(c, p.pts) }
@@ -273,11 +310,11 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
         if (p.kind === 'missing') { missing++; continue }
         if (p.kind === 'excused') { excused++; continue }
         if (p.kind === 'bad') { issues.push({ line, level: 'warn', message: `"${cell(r, c)}" under "${a.name}" is not a score; ignored.` }); continue }
-        if (p.kind === 'pct') { scores.push({ s: st.id, a: a.id, pts: p.pct * (a.max || 100) }); if (!a.max) a.max = 100 }
+        if (p.kind === 'pct') { if (!a.max) { a.max = 100; a.maxAssumed = true } scores.push({ s: st.id, a: a.id, pts: p.pct * a.max, max: a.max }) }
         else {
           if (p.max && !a.max) a.max = p.max
           // "7/8" in a column whose maximum is already known from another format is rescaled to that maximum.
-          scores.push({ s: st.id, a: a.id, pts: p.max && a.max !== p.max ? p.pts / p.max * a.max : p.pts })
+          scores.push({ s: st.id, a: a.id, pts: p.max && a.max !== p.max ? p.pts / p.max * a.max : p.pts, ...(p.max ? { max: a.max } : {}) })
         }
         any = true
       }
@@ -292,11 +329,15 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
     for (const a of assessments.values()) if (!a.max) {
       const top = Math.max(0, ...scores.filter(s => s.a === a.id).map(s => s.pts))
       a.max = top <= 4 ? 4 : top <= 10 ? 10 : 100
+      a.maxAssumed = true
       issues.push({ line: csv.lines[0] ?? 1, level: 'warn', message: `No points possible for "${a.name}"; assumed ${a.max}. Edit it on the Assessments panel if that is wrong.` })
     }
     if (!metaDates.size && cols.length) issues.push({ line: csv.lines[0] ?? 1, level: 'warn', message: 'The export has no dates, so column order is used as time order. Add dates on the Assessments panel or with a mapping file.' })
   } else {
     let order = 0
+    const given = new Set<string>()
+    // Per score: plain points, which follow the assessment's points possible when that is what they were out of.
+    const raw: boolean[] = []
     for (const { r, line } of body) {
       const st = studentFrom(r, map, kind)
       if (!st) { issues.push({ line, level: 'error', message: 'No student name or ID; row skipped.' }); continue }
@@ -308,16 +349,18 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       if (p.kind === 'excused') { excused++; continue }
       if (p.kind === 'bad') { issues.push({ line, level: 'error', message: `"${cell(r, map.score)}" is not a score; row skipped.` }); continue }
       const mxRaw = cell(r, map.max)
-      const mx = mxRaw ? num(mxRaw) : p.kind === 'pts' ? p.max ?? NaN : 100
-      if (mxRaw && !(mx > 0)) { issues.push({ line, level: 'error', message: `Points possible "${mxRaw}" is not a positive number; row skipped.` }); continue }
+      // A fraction is out of its own total whatever the points column says.
+      const own = p.kind === 'pts' && p.max ? p.max : 0
+      const mx = own || (mxRaw ? num(mxRaw) : p.kind === 'pts' ? NaN : 100)
+      if (mxRaw && !(num(mxRaw) > 0)) { issues.push({ line, level: 'error', message: `Points possible "${mxRaw}" is not a positive number; row skipped.` }); continue }
       const id = assessmentId(name)
       const dRaw = cell(r, map.date), d = dRaw ? parseDate(dRaw) : ''
       if (dRaw && !d) issues.push({ line, level: 'warn', message: `Could not read the date "${dRaw}". Use YYYY-MM-DD.` })
       const a = assessments.get(id) ?? { id, name, date: '', order: order++, max: 0, standards: [] }
       if (d && !a.date) a.date = d
-      if (mx > 0 && kind !== 'items') a.max = Math.max(a.max, mx)
+      if (mx > 0 && kind !== 'items') { if (mxRaw || own) given.add(id); a.max = Math.max(a.max, mx) }
       assessments.set(id, a)
-      students.set(st.id, students.get(st.id)?.name ? { ...students.get(st.id)!, ...st } : st)
+      students.set(st.id, withKnownName(students.get(st.id), st))
       const pts = p.kind === 'pct' ? p.pct * (mx > 0 ? mx : 100) : p.pts
       if (kind === 'items') {
         const codes = cell(r, map.standard).split(/[;|]+/).map(x => x.trim()).filter(Boolean).map(normalizeCode)
@@ -327,14 +370,16 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
         if (!(max > 0)) { issues.push({ line, level: 'error', message: 'Item scores need points possible; row skipped.' }); continue }
         if (codes.length) for (const c of codes) { itemScores.push({ s: st.id, a: id, std: c, pts, max, ...(item ? { item: codes.length > 1 ? `${item}:${c}` : item } : {}) }); if (!a.standards.includes(c)) a.standards.push(c) }
         else itemScores.push({ s: st.id, a: id, std: '', pts, max, item })
-      } else scores.push({ s: st.id, a: id, pts })
+      } else scores.push({ s: st.id, a: id, pts, ...(mx > 0 ? { max: mx } : {}) }), raw.push(p.kind === 'pts' && !own)
       used++
     }
-    for (const a of assessments.values()) if (!a.max && kind !== 'items') { a.max = 100; issues.push({ line: 0, level: 'warn', message: `No points possible for "${a.name}"; assumed 100.` }) }
+    scores.forEach((x, i) => { if (raw[i] && x.max === assessments.get(x.a)!.max) delete x.max })
+    for (const a of assessments.values()) if (a.max && !given.has(a.id)) a.maxAssumed = true
+    for (const a of assessments.values()) if (!a.max && kind !== 'items') { a.max = 100; a.maxAssumed = true; issues.push({ line: 0, level: 'warn', message: `No points possible for "${a.name}"; assumed 100.` }) }
   }
   if (missing) issues.push({ line: 0, level: 'warn', message: `${missing} "missing" marks are not counted as evidence (a missing assessment is not a 0 on a standard). Chase those separately.` })
   if (excused) issues.push({ line: 0, level: 'warn', message: `${excused} excused marks ignored.` })
-  const nRows = isWide(kind) ? students.size + issues.filter(i => i.level === 'error' && i.line > 0).length : body.length
+  const nRows = isWide(kind) ? students.size + issues.filter(i => i.level === 'error' && i.line > 0).length : all.length
   return {
     part: { students: [...students.values()], assessments: [...assessments.values()], scores, itemScores },
     issues, rows: nRows, used, skipped: issues.filter(i => i.level === 'error').length,
@@ -344,25 +389,36 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
 
 // ---------- Merging ----------
 
+/** Points possible stated by the teacher, on the panel or in a mapping file. */
+export const withMax = (a: Assessment, max: number): Pick<Assessment, 'max' | 'maxAssumed' | 'fileMax'> => ({ max, maxAssumed: undefined, fileMax: a.fileMax ?? (a.max && !a.maxAssumed && a.max !== max ? a.max : undefined) })
+
 /** Merges an imported part into a dataset. Re-importing the same file updates scores instead of duplicating them. */
 export function mergeDataset(base: Dataset, part: Validation['part']): Dataset {
   const students = new Map(base.students.map(s => [s.id, s]))
-  for (const s of part.students ?? []) students.set(s.id, { ...students.get(s.id), ...s, name: s.name || students.get(s.id)?.name || s.id })
+  for (const s of part.students ?? []) students.set(s.id, withKnownName(students.get(s.id), s))
   const assessments = new Map(base.assessments.map(a => [a.id, { ...a }]))
   let order = Math.max(-1, ...base.assessments.map(a => a.order)) + 1
+  const oldMax = new Map<string, number>()
   for (const a of part.assessments ?? []) {
     const cur = assessments.get(a.id)
-    if (cur) assessments.set(a.id, { ...cur, date: a.date || cur.date, max: cur.max || a.max, standards: [...new Set([...cur.standards, ...a.standards])] })
-    else assessments.set(a.id, { ...a, order: order++ })
+    if (cur) {
+      const given = a.max > 0 && !a.maxAssumed
+      // The file now states another total. Plain points already here keep the one they were entered against.
+      const changed = given && cur.max > 0 && a.max !== cur.max && a.max !== cur.fileMax
+      if (changed && !cur.maxAssumed) oldMax.set(a.id, cur.max)
+      const { maxAssumed, fileMax, ...rest } = cur
+      const points = changed || !cur.max ? { max: a.max, ...(a.maxAssumed ? { maxAssumed: true } : {}) } : { max: cur.max, ...(maxAssumed && !given ? { maxAssumed } : {}), ...(fileMax ? { fileMax } : {}) }
+      assessments.set(a.id, { ...rest, ...points, date: a.date || cur.date, standards: [...new Set([...cur.standards, ...a.standards])] })
+    } else assessments.set(a.id, { ...a, order: order++ })
   }
   for (const m of part.mapping ?? []) {
     const id = assessmentId(m.assessment)
     const cur = assessments.get(id) ?? { id, name: m.assessment, date: '', order: order++, max: 0, standards: [] }
     const re = m.reassessOf ? assessmentId(m.reassessOf) : cur.reassessOf
-    assessments.set(id, { ...cur, standards: [...new Set([...cur.standards, ...m.standards])], items: { ...cur.items, ...m.items }, date: m.date ?? cur.date, max: m.max ?? cur.max, ...(re ? { reassessOf: re } : {}) })
+    assessments.set(id, { ...cur, standards: [...new Set([...cur.standards, ...m.standards])], items: { ...cur.items, ...m.items }, date: m.date ?? cur.date, ...(m.max ? withMax(cur, m.max) : {}), ...(re ? { reassessOf: re } : {}) })
   }
   const key = (s: Score) => `${s.s}|${s.a}`
-  const scores = new Map(base.scores.map(s => [key(s), s]))
+  const scores = new Map(base.scores.map(s => [key(s), !s.max && oldMax.has(s.a) ? { ...s, max: oldMax.get(s.a) } : s]))
   for (const s of part.scores ?? []) scores.set(key(s), s)
   // Item rows are keyed by item label when there is one, so re-importing the same file replaces instead of adding.
   const ikey = (s: ItemScore) => `${s.s}|${s.a}|${s.item ? '#' + s.item : s.std}`

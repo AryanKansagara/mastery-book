@@ -31,13 +31,18 @@ export interface Assessment {
   date: string
   order: number
   max: number
+  /** True when no file or teacher has stated `max` yet */
+  maxAssumed?: boolean
+  /** The points possible a file gave before the teacher changed `max`; the same file does not change it back */
+  fileMax?: number
   standards: string[]
   reassessOf?: string
   /** Item tags: item label -> standard code */
   items?: Record<string, string>
 }
 
-export interface Score { s: string; a: string; pts: number }
+/** max: the score's own points possible, for percents, fractions and rows out of a different total than the assessment. */
+export interface Score { s: string; a: string; pts: number; max?: number }
 /** std is '' when the row only names an item; the assessment's item tags resolve it. */
 export interface ItemScore { s: string; a: string; std: string; pts: number; max: number; item?: string }
 
