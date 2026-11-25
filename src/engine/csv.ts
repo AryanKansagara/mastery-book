@@ -240,7 +240,11 @@ export function assessmentColumns(csv: Csv, map: Mapping): number[] {
 }
 
 export interface Issue { line: number; level: 'error' | 'warn'; message: string }
-export interface Validation { part: Partial<Dataset> & { mapping?: MappingRow[] }; issues: Issue[]; rows: number; used: number; skipped: number; summary: string }
+/** One student's work on one assessment; on one item or standards of it when the file says so. */
+export interface Mark { s: string; a: string; item?: string; stds?: string[] }
+/** cleared: marked excused or missing. unscored: an empty or unreadable cell. refs: the assessments these name. */
+export interface Part extends Partial<Dataset> { mapping?: MappingRow[]; cleared?: Mark[]; unscored?: Mark[]; refs?: Named[] }
+export interface Validation { part: Part; issues: Issue[]; rows: number; used: number; skipped: number; summary: string }
 export interface MappingRow { assessment: string; id: string; src?: string; standards: string[]; items: Record<string, string>; date?: string; max?: number; reassessOf?: Named }
 
 /** A plain number, accepting decimal commas; NaN otherwise. */
@@ -319,6 +323,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
   const assessments = new Map<string, Assessment>()
   const scores: Score[] = []
   const itemScores: ItemScore[] = []
+  const cleared: Mark[] = [], unscored: Mark[] = [], refs = new Map<string, Named>()
   let used = 0, missing = 0, excused = 0
   const checks: { line: number; raw: string; student: string; a: Assessment; pts: number; max?: number }[] = []
 
@@ -373,9 +378,15 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       for (const c of cols) {
         const a = assessments.get(byCol.get(c)!.id)!
         const p = parseScore(cell(r, c), csv.decimalComma)
+        if (p.kind === 'missing' || p.kind === 'excused') {
+          if (p.kind === 'missing') missing++
+          else excused++
+          cleared.push({ s: st.id, a: a.id })
+          scores.splice(0, scores.length, ...scores.filter(x => x.s !== st.id || x.a !== a.id))
+          continue
+        }
+        if (p.kind === 'blank' || p.kind === 'bad') unscored.push({ s: st.id, a: a.id })
         if (p.kind === 'blank') continue
-        if (p.kind === 'missing') { missing++; continue }
-        if (p.kind === 'excused') { excused++; continue }
         if (p.kind === 'bad') { issues.push({ line, level: 'warn', message: `"${cell(r, c)}" under "${a.name}" is not a score; ignored.` }); continue }
         if (p.kind === 'pct') { if (!a.max) { a.max = 100; a.maxAssumed = true } scores.push({ s: st.id, a: a.id, pts: p.pct * a.max, max: a.max }) }
         else {
@@ -392,6 +403,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
     // Columns with no scores at all (ungraded assignments, Khan Academy videos) are not assessments yet.
     for (const a of [...assessments.values()]) if (!scores.some(s => s.a === a.id)) {
       assessments.delete(a.id)
+      refs.set(a.id, a)
       issues.push({ line: csv.lines[0] ?? 1, level: 'warn', message: `"${a.name}" has no scores yet, so it was left out. Re-import once it is graded.` })
     }
     for (const a of assessments.values()) if (!a.max) {
@@ -415,9 +427,22 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       const { id, name, src } = named(cell(r, map.assessment))
       if (!name) { issues.push({ line, level: 'error', message: 'No assessment name; row skipped.' }); continue }
       const p = parseScore(cell(r, map.score), csv.decimalComma)
+      const codes = kind === 'items' ? cell(r, map.standard).split(/[;|]+/).map(x => x.trim()).filter(Boolean).map(normalizeCode) : []
+      const item = kind === 'items' ? cell(r, map.item) : ''
+      const mark: Mark = { s: st.id, a: id, ...(item ? { item } : {}), ...(codes.length ? { stds: codes } : {}) }
+      if (p.kind === 'blank' || p.kind === 'bad') { unscored.push(mark); refs.set(id, { id, name, src }) }
       if (p.kind === 'blank') { issues.push({ line, level: 'warn', message: `Empty score for ${st.name} on "${name}".` }); continue }
-      if (p.kind === 'missing') { missing++; continue }
-      if (p.kind === 'excused') { excused++; continue }
+      if (p.kind === 'missing' || p.kind === 'excused') {
+        if (p.kind === 'missing') missing++
+        else excused++
+        if (kind === 'items' && !codes.length && !item) { issues.push({ line, level: 'error', message: 'No standard or item on this row; skipped.' }); continue }
+        cleared.push(mark)
+        refs.set(id, { id, name, src })
+        const k = `${st.id}|${id}`, was = at.get(k)
+        if (was) { replaced.add(was.i); at.delete(k); issues.push({ line: was.line, level: 'warn', message: `The score for ${st.name} on "${name}" is replaced by the ${p.kind} mark on line ${line}.` }) }
+        itemScores.splice(0, itemScores.length, ...itemScores.filter(x => kind !== 'items' || !marks(mark, x)))
+        continue
+      }
       if (p.kind === 'bad') { issues.push({ line, level: 'error', message: `"${cell(r, map.score)}" is not a score; row skipped.` }); continue }
       const mxRaw = cell(r, map.max)
       // A fraction is out of its own total whatever the points column says.
@@ -434,8 +459,6 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       const pts = p.kind === 'pct' ? p.pct * (mx > 0 ? mx : 100) : p.pts
       if (!(p.kind === 'pts' && !(mx > 0) && kind === 'items')) checks.push({ line, raw: cell(r, map.score), student: st.name, a, pts, max: mx > 0 ? mx : undefined })
       if (kind === 'items') {
-        const codes = cell(r, map.standard).split(/[;|]+/).map(x => x.trim()).filter(Boolean).map(normalizeCode)
-        const item = cell(r, map.item)
         if (!codes.length && !item) { issues.push({ line, level: 'error', message: 'No standard or item on this row; skipped.' }); continue }
         const max = mx > 0 ? mx : NaN
         if (!(max > 0)) { issues.push({ line, level: 'error', message: 'Item scores need points possible; row skipped.' }); continue }
@@ -460,7 +483,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
   if (excused) issues.push({ line: 0, level: 'warn', message: `${excused} excused marks ignored.` })
   const nRows = isWide(kind) ? students.size + issues.filter(i => i.level === 'error' && i.line > 0).length : all.length
   return {
-    part: { students: [...students.values()], assessments: [...assessments.values()], scores, itemScores },
+    part: { students: [...students.values()], assessments: [...assessments.values()], scores, itemScores, cleared, unscored, refs: [...refs.values()].map(({ id, name, src }) => ({ id, name, ...(src ? { src } : {}) })) },
     issues, rows: nRows, used, skipped: issues.filter(i => i.level === 'error').length,
     summary: `${students.size} students, ${assessments.size} assessments, ${(scores.length + itemScores.length).toLocaleString()} scores`,
   }
@@ -471,13 +494,40 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
 /** Points possible stated by the teacher, on the panel or in a mapping file. */
 export const withMax = (a: Assessment, max: number): Pick<Assessment, 'max' | 'maxAssumed' | 'fileMax'> => ({ max, maxAssumed: undefined, fileMax: a.fileMax ?? (a.max && !a.maxAssumed && a.max !== max ? a.max : undefined) })
 
+/** Whether a mark on an item or standard is about this item score. */
+const marks = (m: Mark, x: ItemScore) => x.s === m.s && x.a === m.a && (m.item ? x.item === m.item || !!x.item?.startsWith(`${m.item}:`) : !x.item && !!m.stds?.includes(x.std))
+const onItem = (m: Mark) => !!m.item || !!m.stds
+
+/** What an import does to scores already in the class: how many it removes and keeps, and the item scores left on excused or missing work. */
+export function importEffects(base: Dataset, file: Part): { removed: number; kept: number; items: number } {
+  const part = withKnownIds(base, file)
+  const key = (x: { s: string; a: string }) => `${x.s}|${x.a}`
+  const fresh = new Set((part.scores ?? []).map(key))
+  const whole = new Set((part.cleared ?? []).filter(m => !onItem(m)).map(key))
+  const parts = (part.cleared ?? []).filter(onItem)
+  const freshItem = (x: ItemScore) => (part.itemScores ?? []).some(y => key(x) === key(y) && x.item === y.item && x.std === y.std)
+  const gone = (x: ItemScore) => parts.some(m => marks(m, x)) && !freshItem(x)
+  const empty = new Set((part.unscored ?? []).filter(m => !onItem(m)).map(key)), emptyItems = (part.unscored ?? []).filter(onItem)
+  return {
+    removed: base.scores.filter(x => whole.has(key(x)) && !fresh.has(key(x))).length + base.itemScores.filter(gone).length,
+    kept: base.scores.filter(x => empty.has(key(x)) && !whole.has(key(x)) && !fresh.has(key(x))).length + base.itemScores.filter(x => emptyItems.some(m => marks(m, x)) && !gone(x) && !freshItem(x)).length,
+    items: base.itemScores.filter(x => whole.has(key(x)) && !fresh.has(key(x))).length,
+  }
+}
+
+function withKnownIds(base: Dataset, file: Part): Part {
+  const ids = knownIds(base, [...(file.refs ?? []), ...(file.assessments ?? []), ...(file.mapping ?? []).flatMap(m => [{ id: m.id, name: m.assessment, src: m.src }, ...(m.reassessOf ? [m.reassessOf] : [])])])
+  if (!ids.size) return file
+  const own = <T extends { a: string }>(list?: T[]) => list?.map(x => ({ ...x, a: ids.get(x.a) ?? x.a }))
+  const named = <T extends { id: string }>(x: T) => ({ ...x, id: ids.get(x.id) ?? x.id })
+  return { ...file, assessments: file.assessments?.map(named), scores: own(file.scores), itemScores: own(file.itemScores), cleared: own(file.cleared), unscored: own(file.unscored), mapping: file.mapping?.map(m => named({ ...m, reassessOf: m.reassessOf && named(m.reassessOf) })) }
+}
+
 /** Merges an imported part into a dataset. Re-importing the same file updates scores instead of duplicating them. */
-export function mergeDataset(base: Dataset, file: Validation['part']): Dataset {
-  const ids = knownIds(base, [...(file.assessments ?? []), ...(file.mapping ?? []).flatMap(m => [{ id: m.id, name: m.assessment, src: m.src }, ...(m.reassessOf ? [m.reassessOf] : [])])])
-  const own = (id: string) => ids.get(id) ?? id
-  const part = ids.size ? { ...file, assessments: file.assessments?.map(a => ({ ...a, id: own(a.id) })), scores: file.scores?.map(s => ({ ...s, a: own(s.a) })), itemScores: file.itemScores?.map(s => ({ ...s, a: own(s.a) })), mapping: file.mapping?.map(m => ({ ...m, id: own(m.id) })) } : file
+export function mergeDataset(base: Dataset, file: Part): Dataset {
+  const part = withKnownIds(base, file)
   // A column stored before Canvas ids were kept may hold another column's scores for students this file lists again.
-  const mixed = new Set([...ids].filter(([from, to]) => from !== to && !base.assessments.find(a => a.id === to)?.src && file.assessments?.some(a => a.id === from)).map(([, to]) => to))
+  const mixed = new Set((file.assessments ?? []).map((a, i) => ({ from: a.id, to: part.assessments![i].id })).filter(x => x.from !== x.to && !base.assessments.find(a => a.id === x.to)?.src).map(x => x.to))
   const listed = new Set((file.students ?? []).map(s => s.id))
   const students = new Map(base.students.map(s => [s.id, s]))
   for (const s of part.students ?? []) students.set(s.id, withKnownName(students.get(s.id), s))
@@ -500,7 +550,7 @@ export function mergeDataset(base: Dataset, file: Validation['part']): Dataset {
   for (const m of part.mapping ?? []) {
     const id = m.id
     const cur: Assessment = assessments.get(id) ?? { id, name: m.assessment, ...(m.src ? { src: m.src } : {}), date: '', order: order++, max: 0, standards: [] }
-    const re = m.reassessOf ? ids.get(m.reassessOf.id) ?? m.reassessOf.id : cur.reassessOf
+    const re = m.reassessOf ? m.reassessOf.id : cur.reassessOf
     assessments.set(id, { ...cur, standards: [...new Set([...cur.standards, ...m.standards])], items: { ...cur.items, ...m.items }, date: m.date ?? cur.date, ...(m.max ? withMax(cur, m.max) : {}), ...(re ? { reassessOf: re } : {}) })
   }
   const namesakes = new Map<string, number>()
@@ -508,10 +558,12 @@ export function mergeDataset(base: Dataset, file: Validation['part']): Dataset {
   for (const a of assessments.values()) if (a.src && !canvasId(a.name) && namesakes.get(a.name.toLowerCase())! > 1) assessments.set(a.id, { ...a, name: `${a.name} (${a.src})` })
   const key = (s: Score) => `${s.s}|${s.a}`
   const scores = new Map(base.scores.filter(s => !(mixed.has(s.a) && listed.has(s.s))).map(s => [key(s), !s.max && oldMax.has(s.a) ? { ...s, max: oldMax.get(s.a) } : s]))
+  for (const m of part.cleared ?? []) if (!onItem(m)) scores.delete(`${m.s}|${m.a}`)
   for (const s of part.scores ?? []) scores.set(key(s), s)
+  const gone = (part.cleared ?? []).filter(onItem)
   // Item rows are keyed by item label when there is one, so re-importing the same file replaces instead of adding.
   const ikey = (s: ItemScore) => `${s.s}|${s.a}|${s.item ? '#' + s.item : s.std}`
-  const items = new Map<string, ItemScore>(base.itemScores.map(s => [ikey(s), s]))
+  const items = new Map<string, ItemScore>(base.itemScores.filter(x => !gone.some(m => marks(m, x))).map(s => [ikey(s), s]))
   const fresh = new Map<string, ItemScore>()
   for (const s of part.itemScores ?? []) { const k = ikey(s); const f = fresh.get(k); fresh.set(k, f ? { ...f, pts: f.pts + s.pts, max: f.max + s.max } : s) }
   for (const [k, s] of fresh) items.set(k, s)

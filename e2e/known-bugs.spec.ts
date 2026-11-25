@@ -107,13 +107,24 @@ test.fail('#10 a name that looks like a formula is exported as text', async ({ p
   expect(f.text).not.toMatch(/^=/m)
 })
 
-test.fail('#11 a score that became excused is removed on re-import', async ({ page }) => {
+test('#11 a score that became excused is removed on re-import', async ({ page }) => {
   await classWith(page, 'Student,Quiz 1\nPoints Possible,10\nAda,2\nBo,9\n', 'assessment,standard\nQuiz 1,7.EE.A.1\n')
   expect((await levels(page, 'Ada'))[0]).toBe('1')
   await tab(page, 'Data & setup')
-  await importFile(page, 'again.csv', 'Student,Quiz 1\nPoints Possible,10\nAda,EX\nBo,9\n')
+  const again = { name: 'again.csv', text: 'Student,Quiz 1\nPoints Possible,10\nAda,EX\nBo,\n' }
+  await choose(page, again)
+  await expect(pending(page, 'again.csv')).toContainText('1 earlier score will be removed')
+  await expect(pending(page, 'again.csv')).toContainText('1 earlier score will be kept')
+  await pending(page, 'again.csv').getByRole('button', { name: 'Import', exact: true }).click()
+  await expect(page.getByText('1 earlier score removed')).toBeVisible()
   await tab(page, 'Gradebook')
-  expect((await levels(page, 'Ada'))[0]).toBe('·')
+  await expect.poll(async () => (await levels(page, 'Ada'))[0]).toBe('·')
+  expect((await levels(page, 'Bo'))[0]).toBe('4')
+  // A file with nothing but marks can be imported when it removes something.
+  await tab(page, 'Data & setup')
+  await importFile(page, 'all.csv', 'Student,Quiz 1\nPoints Possible,10\nAda,EX\nBo,EX\n')
+  await choose(page, { name: 'twice.csv', text: 'Student,Quiz 1\nPoints Possible,10\nAda,EX\nBo,EX\n' })
+  await expect(pending(page, 'twice.csv').getByRole('button', { name: 'Import', exact: true })).toBeDisabled()
 })
 
 test.fail('#12 a new student is not "unchanged"', async ({ page }) => {

@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from 'react'
-import { assessmentColumns, autoMap, detectKind, FIELD_LABEL, FIELDS_FOR, isWide, KINDS, mergeDataset, parseCsv, toCsv, validate, withMax, type Csv, type Kind, type Mapping, type Validation } from './engine/csv.ts'
+import { assessmentColumns, autoMap, detectKind, FIELD_LABEL, FIELDS_FOR, importEffects, isWide, KINDS, mergeDataset, parseCsv, toCsv, validate, withMax, type Csv, type Kind, type Mapping, type Validation } from './engine/csv.ts'
 import { chronological, SCALES, standardsInUse } from './engine/mastery.ts'
 import { detectScoreMode, notLevels } from './engine/scoremode.ts'
 import { CCSS, normalizeCode } from './engine/standards.ts'
-import type { Assessment, Config, Dataset, GradeRule } from './engine/types.ts'
+import { emptyDataset, type Assessment, type Config, type Dataset, type GradeRule } from './engine/types.ts'
 import { createBlankProject, displayName, stdDesc } from './projectData.ts'
 import { putData, saveProject, uuid, type Project } from './store.ts'
 import { RAW_SYNC_LIMIT, useSync } from './sync.ts'
@@ -43,7 +43,9 @@ export default function DataTab({ project, ds, cfg, update, setConfig }: { proje
   /** Samples are read-only: importing into one starts a new class. */
   const commit = async (p: Pending, v: Validation) => {
     const t = readOnly ? await createBlankProject('My class') : project
-    const merged = mergeDataset(readOnly ? { students: [], assessments: [], scores: [], itemScores: [] } : ds, v.part)
+    const base = readOnly ? emptyDataset() : ds
+    const merged = mergeDataset(base, v.part)
+    const { removed } = importEffects(base, v.part)
     await putData(t.id, merged)
     const meta = { id: uuid(), kind: p.kind, fileName: p.name, rows: v.rows, skipped: v.skipped, at: Date.now() }
     // The first file with scores decides; a mapping or standards list says nothing about how scores are written.
@@ -52,7 +54,7 @@ export default function DataTab({ project, ds, cfg, update, setConfig }: { proje
     const config = scoreMode ? { ...t.config, scoreMode } : t.config
     await saveProject({ ...t, config, imports: [...(readOnly ? [] : project.imports), meta], dataMissing: false })
     setPending(x => x.filter(y => y.id !== p.id))
-    toast(`Imported ${p.name}: ${v.summary}`, { tone: 'ok' })
+    toast(`Imported ${p.name}: ${v.summary}${removed ? `; ${removed} earlier score${removed === 1 ? '' : 's'} removed` : ''}`, { tone: 'ok' })
     if (readOnly) go(`/app/p/${t.id}/data`)
   }
 
@@ -92,7 +94,7 @@ export default function DataTab({ project, ds, cfg, update, setConfig }: { proje
         <p className="muted small" style={{ marginTop: 10 }}>Templates: {Object.keys(TEMPLATES).map((n, i) => <span key={n}>{i ? ' · ' : ''}<button type="button" className="linkish" onClick={() => download(n, TEMPLATES[n])}>{n}</button></span>)}</p>
       </div>
 
-      {pending.map(p => <PendingFile key={p.id} p={p} onChange={n => setPending(x => x.map(y => y.id === p.id ? n : y))} onCancel={() => setPending(x => x.filter(y => y.id !== p.id))} onCommit={commit} />)}
+      {pending.map(p => <PendingFile key={p.id} p={p} ds={readOnly ? null : ds} onChange={n => setPending(x => x.map(y => y.id === p.id ? n : y))} onCancel={() => setPending(x => x.filter(y => y.id !== p.id))} onCommit={commit} />)}
 
       {ds.assessments.length > 0 && (
         <div className="panel">
@@ -156,8 +158,17 @@ function StdChips({ a, ds, readOnly, onChange }: { a: Assessment; ds: Dataset; r
   )
 }
 
-function PendingFile({ p, onChange, onCancel, onCommit }: { p: Pending; onChange(p: Pending): void; onCancel(): void; onCommit(p: Pending, v: Validation): Promise<void> }) {
-  const v = useMemo(() => validate(p.csv, p.kind, p.map, isWide(p.kind) ? p.cols : undefined), [p])
+function PendingFile({ p, ds, onChange, onCancel, onCommit }: { p: Pending; ds: Dataset | null; onChange(p: Pending): void; onCancel(): void; onCommit(p: Pending, v: Validation): Promise<void> }) {
+  const v = useMemo(() => {
+    const v = validate(p.csv, p.kind, p.map, isWide(p.kind) ? p.cols : undefined)
+    const { removed, kept, items } = importEffects(ds ?? emptyDataset(), v.part)
+    const note = (n: number, message: string) => n ? [{ line: 0, level: 'warn' as const, message: `${n} ${message}` }] : []
+    return { ...v, removed, issues: [
+      ...note(removed, `earlier score${removed === 1 ? '' : 's'} will be removed, because this file marks the work excused or missing.`),
+      ...note(items, `item score${items === 1 ? '' : 's'} on work this file marks excused or missing still count${items === 1 ? 's' : ''}; mark those items excused in an item file to remove them.`),
+      ...note(kept, `earlier score${kept === 1 ? '' : 's'} will be kept, because this file has no score there.`),
+      ...v.issues] }
+  }, [p, ds])
   const [busy, setBusy] = useState(false)
   const headers = p.csv.rows[0] ?? []
   const errors = v.issues.filter(i => i.level === 'error')
@@ -200,7 +211,7 @@ function PendingFile({ p, onChange, onCancel, onCommit }: { p: Pending; onChange
         </div>
       )}
       <div className="row gap" style={{ marginTop: 14 }}>
-        <button type="button" className="btn primary" disabled={blocking || !v.used || busy} onClick={async () => { setBusy(true); await onCommit(p, v); setBusy(false) }}>Import</button>
+        <button type="button" className="btn primary" disabled={blocking || (!v.used && !v.removed) || busy} onClick={async () => { setBusy(true); await onCommit(p, v); setBusy(false) }}>Import</button>
         <button type="button" className="btn ghost" onClick={onCancel}>Cancel</button>
       </div>
     </div>
