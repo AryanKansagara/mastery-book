@@ -27,6 +27,8 @@ export interface Student { id: string; name: string; section?: string }
 export interface Assessment {
   id: string
   name: string
+  /** The assignment's id in Canvas */
+  src?: string
   /** YYYY-MM-DD, or '' when the export had no dates (column order is used) */
   date: string
   order: number

@@ -24,7 +24,7 @@ test('#3 rows with extra values or a cut-off end are reported, not scored', asyn
   await expect(pending(page, 'w.csv')).toContainText('2 skipped')
 })
 
-test.fail('#4 same-named Canvas assignments stay separate', async ({ page }) => {
+test('#4 same-named Canvas assignments stay separate', async ({ page }) => {
   await newClass(page)
   await choose(page, { name: 'd.csv', text: 'Student,ID,SIS User ID,SIS Login ID,Section,Exit ticket (501),Exit ticket (502)\n    Points Possible,,,,,5,10\n"Okafor, Ada",1,S1,ada,P3,5,2\n' })
   await expect(pending(page, 'd.csv')).toContainText('1 students, 2 assessments, 2 scores')
@@ -32,10 +32,10 @@ test.fail('#4 same-named Canvas assignments stay separate', async ({ page }) => 
   await expect(page.locator('.assess-table tbody tr')).toHaveCount(2)
 })
 
-test.fail('#4 a repeated student and assessment in a list is reported', async ({ page }) => {
+test('#4 a repeated student and assessment in a list is reported', async ({ page }) => {
   await newClass(page)
   await choose(page, { name: 'l.csv', text: 'student id,student name,assessment,date,score,points possible\n1,Ada,Exit ticket,2026-09-01,2,10\n1,Ada,Exit ticket,2026-09-08,9,10\n' })
-  await expect(pending(page, 'l.csv')).toContainText('line 2')
+  await expect(pending(page, 'l.csv')).toContainText(/line 2The score for Ada on "Exit ticket" is replaced by the one on line 3/)
 })
 
 test('#5 each score keeps its own points possible', async ({ page }) => {

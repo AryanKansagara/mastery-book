@@ -59,6 +59,39 @@ export const studentId = (key: string) => hashId('s', key)
 export const assessmentId = (name: string) => hashId('a', cleanAssessmentName(name))
 /** Canvas appends the assignment id: "Unit 2 Quiz (48213)". */
 export const cleanAssessmentName = (n: string) => n.replace(/\s*\(\d{3,}\)\s*$/, '').trim()
+const canvasId = (n: string) => n.match(/\((\d{3,})\)\s*$/)?.[1]
+
+interface Named { id: string; name: string; src?: string }
+/** Name and id for every raw assessment name in one file. Canvas ids stay in the name when the file needs them to tell assessments apart. */
+function nameAssessments(raws: string[]): (raw: string) => Named {
+  const group = new Map<string, Set<string>>()
+  const parts = (raw: string) => { const clean = cleanAssessmentName(raw), src = canvasId(raw); return { clean, src, full: src ? `${clean} (${src})` : clean } }
+  for (const raw of raws) { const { clean, src } = parts(raw), k = clean.toLowerCase(); if (src) group.set(k, (group.get(k) ?? new Set()).add(src)) }
+  return raw => {
+    const { clean, src, full } = parts(raw)
+    const name = (group.get(clean.toLowerCase())?.size ?? 0) > 1 ? full : clean
+    return { id: hashId('a', name), name, ...(src ? { src } : {}) }
+  }
+}
+
+/** Ids already in the class for a file's assessments: the same Canvas assignment keeps its id however many of that name a file holds. */
+function knownIds(base: Dataset, list: Named[]): Map<string, string> {
+  const here = new Map(base.assessments.map(a => [a.id, a]))
+  const inFile = new Set(list.map(a => a.id)), taken = new Set<string>(), scored = new Set(base.scores.map(s => s.a))
+  const out = new Map<string, string>()
+  // Last first: before Canvas ids were kept, the last column of a name is the one that was stored.
+  for (const a of [...list].reverse()) {
+    if (!a.src) continue
+    const clean = cleanAssessmentName(a.name), plain = hashId('a', clean), full = hashId('a', `${clean} (${a.src})`)
+    const p = here.get(plain)
+    let id = a.id
+    if (a.id === plain) { if (here.has(full) && !inFile.has(full) && p?.src !== a.src) id = full }
+    else if (p && !here.has(a.id) && !inFile.has(plain) && (p.src ? p.src === a.src : scored.has(plain) && !taken.has(plain))) id = plain
+    taken.add(id)
+    if (id !== a.id) out.set(a.id, id)
+  }
+  return out
+}
 
 // ---------- Values ----------
 
@@ -195,7 +228,7 @@ export function assessmentColumns(csv: Csv, map: Mapping): number[] {
 
 export interface Issue { line: number; level: 'error' | 'warn'; message: string }
 export interface Validation { part: Partial<Dataset> & { mapping?: MappingRow[] }; issues: Issue[]; rows: number; used: number; skipped: number; summary: string }
-export interface MappingRow { assessment: string; standards: string[]; items: Record<string, string>; date?: string; max?: number; reassessOf?: string }
+export interface MappingRow { assessment: string; id: string; src?: string; standards: string[]; items: Record<string, string>; date?: string; max?: number; reassessOf?: Named }
 
 /** A plain number, accepting decimal commas; NaN otherwise. */
 const num = (raw: string) => { const p = parseScore(raw); return p.kind === 'pts' && p.max === undefined ? p.pts : NaN }
@@ -244,13 +277,14 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
 
   if (kind === 'mapping') {
     const rows = new Map<string, MappingRow>()
+    const named = nameAssessments(body.flatMap(b => [cell(b.r, map.assessment), cell(b.r, map.reassessOf)]).filter(Boolean))
     let used = 0
     for (const { r, line } of body) {
-      const name = cleanAssessmentName(cell(r, map.assessment))
+      const { id, name, src } = named(cell(r, map.assessment))
       if (!name) { issues.push({ line, level: 'error', message: 'No assessment name; row skipped.' }); continue }
       const codes = cell(r, map.standard).split(/[;|]+|\s{2,}|,\s*(?=[0-9A-Z])/i).map(x => x.trim()).filter(Boolean).map(normalizeCode)
       const item = cell(r, map.item)
-      const m = rows.get(name.toLowerCase()) ?? { assessment: name, standards: [], items: {} }
+      const m = rows.get(id) ?? { assessment: name, id, ...(src ? { src } : {}), standards: [], items: {} }
       for (const c of codes) if (!m.standards.includes(c)) m.standards.push(c)
       if (item && codes[0]) m.items[item] = codes[0]
       if (item && !codes.length) issues.push({ line, level: 'warn', message: `Item "${item}" has no standard tag.` })
@@ -258,13 +292,13 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       if (d) { const p = parseDate(d); if (p) m.date = p; else issues.push({ line, level: 'warn', message: `Could not read the date "${d}". Use YYYY-MM-DD.` }) }
       const mx = cell(r, map.max)
       if (mx) { const n = num(mx); if (n > 0) m.max = n; else issues.push({ line, level: 'warn', message: `Points possible "${mx}" is not a positive number.` }) }
-      const re = cleanAssessmentName(cell(r, map.reassessOf))
-      if (re) m.reassessOf = re
+      const re = cell(r, map.reassessOf)
+      if (re) m.reassessOf = named(re)
       if (!codes.length && !item && !re && !d) issues.push({ line, level: 'warn', message: `"${name}" has no standards listed.` })
-      rows.set(name.toLowerCase(), m)
+      rows.set(id, m)
       used++
     }
-    for (const m of rows.values()) if (m.reassessOf && !rows.has(m.reassessOf.toLowerCase())) issues.push({ line: 0, level: 'warn', message: `"${m.assessment}" is a reassessment of "${m.reassessOf}", which is not in this file. It will link if that assessment is already imported.` })
+    for (const m of rows.values()) if (m.reassessOf && !rows.has(m.reassessOf.id)) issues.push({ line: 0, level: 'warn', message: `"${m.assessment}" is a reassessment of "${m.reassessOf.name}", which is not in this file. It will link if that assessment is already imported.` })
     return { part: { mapping: [...rows.values()] }, issues, rows: all.length, used, skipped: all.length - used, summary: `${rows.size} assessments, ${new Set([...rows.values()].flatMap(m => m.standards)).size} standards` }
   }
 
@@ -290,10 +324,29 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       }
       return false
     })
+    const named = nameAssessments(cols.map(c => head[c]))
+    const byCol = new Map<number, Named>()
+    const groups = new Map<string, number[]>()
+    for (const c of cols) { const { id } = named(head[c]); groups.set(id, [...(groups.get(id) ?? []), c]) }
+    const taken = new Set(groups.keys())
+    for (const g of groups.values()) {
+      // Columns with nothing but the name in common are numbered by date when all have one, or else by place.
+      const dated = g.every(c => metaDates.has(c))
+      const inOrder = dated ? [...g].sort((x, y) => metaDates.get(x)!.localeCompare(metaDates.get(y)!) || x - y) : g
+      const first = named(head[g[0]])
+      let n = 1
+      inOrder.forEach((c, i) => {
+        let a = named(head[c])
+        while (i && taken.has(a.id)) { const name = `${first.name} (${++n})`; a = { ...a, name, id: hashId('a', name) } }
+        taken.add(a.id)
+        byCol.set(c, a)
+      })
+      if (g.length > 1) issues.push({ line: csv.lines[0] ?? 1, level: 'warn', message: `${g.length} columns are named "${first.name}", so they were imported in ${dated ? 'date' : 'column'} order as ${inOrder.map(c => `"${byCol.get(c)!.name}"`).join(', ')}. Give them different names so a later export cannot swap them.` })
+    }
     cols.forEach((c, k) => {
-      const name = cleanAssessmentName(head[c] ?? `Column ${c + 1}`)
+      const { id, name, src } = byCol.get(c)!
       const inlineMax = name.match(/\[(\d+(?:\.\d+)?)\s*(?:pts?|points)?\]|\((\d+(?:\.\d+)?)\s*(?:pts?|points)\)$/i)
-      assessments.set(assessmentId(name), { id: assessmentId(name), name, date: metaDates.get(c) ?? '', order: k, max: metaPoints.get(c) ?? (inlineMax ? +(inlineMax[1] ?? inlineMax[2]) : 0), standards: [] })
+      assessments.set(id, { id, name, ...(src ? { src } : {}), date: metaDates.get(c) ?? '', order: k, max: metaPoints.get(c) ?? (inlineMax ? +(inlineMax[1] ?? inlineMax[2]) : 0), standards: [] })
     })
     for (const { r, line } of students_) {
       const st = studentFrom(r, map, kind)
@@ -304,7 +357,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       students.set(st.id, st)
       let any = false
       for (const c of cols) {
-        const a = assessments.get(assessmentId(head[c]))!
+        const a = assessments.get(byCol.get(c)!.id)!
         const p = parseScore(cell(r, c))
         if (p.kind === 'blank') continue
         if (p.kind === 'missing') { missing++; continue }
@@ -338,10 +391,13 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
     const given = new Set<string>()
     // Per score: plain points, which follow the assessment's points possible when that is what they were out of.
     const raw: boolean[] = []
+    const named = nameAssessments(body.map(b => cell(b.r, map.assessment)).filter(Boolean))
+    const at = new Map<string, { line: number; i: number }>()
+    const replaced = new Set<number>()
     for (const { r, line } of body) {
       const st = studentFrom(r, map, kind)
       if (!st) { issues.push({ line, level: 'error', message: 'No student name or ID; row skipped.' }); continue }
-      const name = cleanAssessmentName(cell(r, map.assessment))
+      const { id, name, src } = named(cell(r, map.assessment))
       if (!name) { issues.push({ line, level: 'error', message: 'No assessment name; row skipped.' }); continue }
       const p = parseScore(cell(r, map.score))
       if (p.kind === 'blank') { issues.push({ line, level: 'warn', message: `Empty score for ${st.name} on "${name}".` }); continue }
@@ -353,10 +409,9 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       const own = p.kind === 'pts' && p.max ? p.max : 0
       const mx = own || (mxRaw ? num(mxRaw) : p.kind === 'pts' ? NaN : 100)
       if (mxRaw && !(num(mxRaw) > 0)) { issues.push({ line, level: 'error', message: `Points possible "${mxRaw}" is not a positive number; row skipped.` }); continue }
-      const id = assessmentId(name)
       const dRaw = cell(r, map.date), d = dRaw ? parseDate(dRaw) : ''
       if (dRaw && !d) issues.push({ line, level: 'warn', message: `Could not read the date "${dRaw}". Use YYYY-MM-DD.` })
-      const a = assessments.get(id) ?? { id, name, date: '', order: order++, max: 0, standards: [] }
+      const a = assessments.get(id) ?? { id, name, ...(src ? { src } : {}), date: '', order: order++, max: 0, standards: [] }
       if (d && !a.date) a.date = d
       if (mx > 0 && kind !== 'items') { if (mxRaw || own) given.add(id); a.max = Math.max(a.max, mx) }
       assessments.set(id, a)
@@ -370,10 +425,17 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
         if (!(max > 0)) { issues.push({ line, level: 'error', message: 'Item scores need points possible; row skipped.' }); continue }
         if (codes.length) for (const c of codes) { itemScores.push({ s: st.id, a: id, std: c, pts, max, ...(item ? { item: codes.length > 1 ? `${item}:${c}` : item } : {}) }); if (!a.standards.includes(c)) a.standards.push(c) }
         else itemScores.push({ s: st.id, a: id, std: '', pts, max, item })
-      } else scores.push({ s: st.id, a: id, pts, ...(mx > 0 ? { max: mx } : {}) }), raw.push(p.kind === 'pts' && !own)
+      } else {
+        const k = `${st.id}|${id}`, was = at.get(k)
+        if (was) { replaced.add(was.i); issues.push({ line: was.line, level: 'warn', message: `The score for ${st.name} on "${name}" is replaced by the one on line ${line}. To keep both, give them different assessment names.` }) }
+        at.set(k, { line, i: scores.length })
+        scores.push({ s: st.id, a: id, pts, ...(mx > 0 ? { max: mx } : {}) })
+        raw.push(p.kind === 'pts' && !own)
+      }
       used++
     }
     scores.forEach((x, i) => { if (raw[i] && x.max === assessments.get(x.a)!.max) delete x.max })
+    scores.splice(0, scores.length, ...scores.filter((_, i) => !replaced.has(i)))
     for (const a of assessments.values()) if (a.max && !given.has(a.id)) a.maxAssumed = true
     for (const a of assessments.values()) if (!a.max && kind !== 'items') { a.max = 100; a.maxAssumed = true; issues.push({ line: 0, level: 'warn', message: `No points possible for "${a.name}"; assumed 100.` }) }
   }
@@ -393,7 +455,13 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
 export const withMax = (a: Assessment, max: number): Pick<Assessment, 'max' | 'maxAssumed' | 'fileMax'> => ({ max, maxAssumed: undefined, fileMax: a.fileMax ?? (a.max && !a.maxAssumed && a.max !== max ? a.max : undefined) })
 
 /** Merges an imported part into a dataset. Re-importing the same file updates scores instead of duplicating them. */
-export function mergeDataset(base: Dataset, part: Validation['part']): Dataset {
+export function mergeDataset(base: Dataset, file: Validation['part']): Dataset {
+  const ids = knownIds(base, [...(file.assessments ?? []), ...(file.mapping ?? []).flatMap(m => [{ id: m.id, name: m.assessment, src: m.src }, ...(m.reassessOf ? [m.reassessOf] : [])])])
+  const own = (id: string) => ids.get(id) ?? id
+  const part = ids.size ? { ...file, assessments: file.assessments?.map(a => ({ ...a, id: own(a.id) })), scores: file.scores?.map(s => ({ ...s, a: own(s.a) })), itemScores: file.itemScores?.map(s => ({ ...s, a: own(s.a) })), mapping: file.mapping?.map(m => ({ ...m, id: own(m.id) })) } : file
+  // A column stored before Canvas ids were kept may hold another column's scores for students this file lists again.
+  const mixed = new Set([...ids].filter(([from, to]) => from !== to && !base.assessments.find(a => a.id === to)?.src && file.assessments?.some(a => a.id === from)).map(([, to]) => to))
+  const listed = new Set((file.students ?? []).map(s => s.id))
   const students = new Map(base.students.map(s => [s.id, s]))
   for (const s of part.students ?? []) students.set(s.id, withKnownName(students.get(s.id), s))
   const assessments = new Map(base.assessments.map(a => [a.id, { ...a }]))
@@ -407,18 +475,22 @@ export function mergeDataset(base: Dataset, part: Validation['part']): Dataset {
       const changed = given && cur.max > 0 && a.max !== cur.max && a.max !== cur.fileMax
       if (changed && !cur.maxAssumed) oldMax.set(a.id, cur.max)
       const { maxAssumed, fileMax, ...rest } = cur
+      const src = cur.src ?? a.src
       const points = changed || !cur.max ? { max: a.max, ...(a.maxAssumed ? { maxAssumed: true } : {}) } : { max: cur.max, ...(maxAssumed && !given ? { maxAssumed } : {}), ...(fileMax ? { fileMax } : {}) }
-      assessments.set(a.id, { ...rest, ...points, date: a.date || cur.date, standards: [...new Set([...cur.standards, ...a.standards])] })
+      assessments.set(a.id, { ...rest, ...(src ? { src } : {}), ...points, date: a.date || cur.date, standards: [...new Set([...cur.standards, ...a.standards])] })
     } else assessments.set(a.id, { ...a, order: order++ })
   }
   for (const m of part.mapping ?? []) {
-    const id = assessmentId(m.assessment)
-    const cur = assessments.get(id) ?? { id, name: m.assessment, date: '', order: order++, max: 0, standards: [] }
-    const re = m.reassessOf ? assessmentId(m.reassessOf) : cur.reassessOf
+    const id = m.id
+    const cur: Assessment = assessments.get(id) ?? { id, name: m.assessment, ...(m.src ? { src: m.src } : {}), date: '', order: order++, max: 0, standards: [] }
+    const re = m.reassessOf ? ids.get(m.reassessOf.id) ?? m.reassessOf.id : cur.reassessOf
     assessments.set(id, { ...cur, standards: [...new Set([...cur.standards, ...m.standards])], items: { ...cur.items, ...m.items }, date: m.date ?? cur.date, ...(m.max ? withMax(cur, m.max) : {}), ...(re ? { reassessOf: re } : {}) })
   }
+  const namesakes = new Map<string, number>()
+  for (const a of assessments.values()) { const k = cleanAssessmentName(a.name).toLowerCase(); namesakes.set(k, (namesakes.get(k) ?? 0) + 1) }
+  for (const a of assessments.values()) if (a.src && !canvasId(a.name) && namesakes.get(a.name.toLowerCase())! > 1) assessments.set(a.id, { ...a, name: `${a.name} (${a.src})` })
   const key = (s: Score) => `${s.s}|${s.a}`
-  const scores = new Map(base.scores.map(s => [key(s), !s.max && oldMax.has(s.a) ? { ...s, max: oldMax.get(s.a) } : s]))
+  const scores = new Map(base.scores.filter(s => !(mixed.has(s.a) && listed.has(s.s))).map(s => [key(s), !s.max && oldMax.has(s.a) ? { ...s, max: oldMax.get(s.a) } : s]))
   for (const s of part.scores ?? []) scores.set(key(s), s)
   // Item rows are keyed by item label when there is one, so re-importing the same file replaces instead of adding.
   const ikey = (s: ItemScore) => `${s.s}|${s.a}|${s.item ? '#' + s.item : s.std}`
