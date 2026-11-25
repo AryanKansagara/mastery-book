@@ -4,6 +4,8 @@ import type { Assessment, Dataset, ItemScore, Score, Student } from './types.ts'
 export interface Csv {
   rows: string[][]
   lines: number[]
+  /** Separated by semicolons, as spreadsheets do where the comma is the decimal mark */
+  decimalComma?: boolean
   /** Line where a quote starts that is never closed properly */
   badQuote?: number
   /** The last row ends without a line end */
@@ -38,7 +40,7 @@ export function parseCsv(text: string): Csv {
   }
   if (field !== '' || row.length) { row.push(field.trim()); if (row.some(x => x !== '')) { rows.push(row); lines.push(rowLine) } }
   if (quoted) badQuote ||= quoteLine
-  return { rows, lines, ...(badQuote ? { badQuote } : {}), ...(text && !/[\r\n]$/.test(text) ? { openEnd: true } : {}) }
+  return { rows, lines, ...(delim === ';' ? { decimalComma: true } : {}), ...(badQuote ? { badQuote } : {}), ...(text && !/[\r\n]$/.test(text) ? { openEnd: true } : {}) }
 }
 
 function sniffDelimiter(text: string): string {
@@ -97,18 +99,29 @@ function knownIds(base: Dataset, list: Named[]): Map<string, string> {
 
 export type Parsed = { kind: 'pts'; pts: number; max?: number } | { kind: 'pct'; pct: number } | { kind: 'blank' } | { kind: 'missing' } | { kind: 'excused' } | { kind: 'bad' }
 
-export function parseScore(raw: string): Parsed {
+/** A plain number without a sign; NaN for anything else. A lone comma followed by three digits is a thousands separator, except in files separated by semicolons, where it is the decimal mark. */
+function plainNumber(raw: string, decimalComma: boolean): number {
+  const s = raw.trim().replace(/^\+/, '')
+  if (/^(\d+\.?\d*|\.\d+)$/.test(s)) return Number(s)
+  const thousands = /^[1-9]\d{0,2}(,\d{3})+(\.\d+)?$/.test(s)
+  if (thousands && !(decimalComma && /^\d+,\d+$/.test(s))) return Number(s.replace(/,/g, ''))
+  if (/^\d+,\d+$/.test(s) || /^[1-9]\d{0,2}(\.\d{3})+,\d+$/.test(s)) return Number(s.replace(/\./g, '').replace(',', '.'))
+  return NaN
+}
+
+export function parseScore(raw: string, decimalComma = false): Parsed {
   const s = raw.trim()
   // "--" is Khan Academy's "not assigned"; "Completed" is its status for videos and articles; Classroom writes statuses too.
   if (!s || /^[-—–]+$/.test(s) || /^(completed?|turned in|assigned|returned|graded|draft)$/i.test(s)) return { kind: 'blank' }
   if (/^(missing|m|mi|absent|abs|incomplete|inc|not submitted|not started|0\*)$/i.test(s)) return { kind: 'missing' }
   if (/^(ex|exc|excused|n\/?a)$/i.test(s)) return { kind: 'excused' }
-  const frac = s.match(/^(-?\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/)
-  if (frac) return { kind: 'pts', pts: +frac[1], max: +frac[2] }
-  const pct = s.match(/^(-?\d+(?:\.\d+)?)\s*%$/)
-  if (pct) return { kind: 'pct', pct: +pct[1] / 100 }
-  // "8,5" and "8,50" are decimal commas (Canvas in European locales); "1,250" is a thousands separator.
-  const n = /^-?\d+,\d{1,2}$/.test(s) ? Number(s.replace(',', '.')) : Number(s.replace(/,/g, ''))
+  const frac = s.split('/')
+  if (frac.length === 2) {
+    const pts = plainNumber(frac[0], decimalComma), max = plainNumber(frac[1], decimalComma)
+    return pts >= 0 && max > 0 ? { kind: 'pts', pts, max } : { kind: 'bad' }
+  }
+  if (s.endsWith('%')) { const pct = plainNumber(s.slice(0, -1), decimalComma); return pct >= 0 ? { kind: 'pct', pct: pct / 100 } : { kind: 'bad' } }
+  const n = plainNumber(s, decimalComma)
   return Number.isFinite(n) ? { kind: 'pts', pts: n } : { kind: 'bad' }
 }
 
@@ -204,7 +217,7 @@ const NOT_ASSESSMENT = /^(last ?name|first ?name|email( address)?|student|id|sis
 const META_ROW = /^(points possible|points|out of|max(imum)?|date|due( date)?|class average|average|manual posting|read only)$/i
 
 /** "Max" and "Date" are also people's names, so a row with such a label is a student when anything else in it says so. */
-function isStudentRow(rows: string[][], at: number, label: string, map: Mapping, cols: number[]): boolean {
+function isStudentRow(rows: string[][], at: number, label: string, map: Mapping, cols: number[], decimalComma?: boolean): boolean {
   if (!/^(max|date)$/i.test(label)) return false
   const r = rows[at]
   const ids = [map.sid, map.name, map.first, map.last].map(i => cell(r, i)).filter(x => /[\p{L}\p{N}]/u.test(x))
@@ -213,7 +226,7 @@ function isStudentRow(rows: string[][], at: number, label: string, map: Mapping,
   if (!/^max$/i.test(label)) return false
   const isPoints = (x: string[]) => /^(points possible|points|out of|maximum)$/i.test((x[0] ?? '').trim())
   if (rows.slice(0, at).some(x => !META_ROW.test((x[0] ?? '').trim())) || rows.some(isPoints)) return true
-  return cols.some(c => { const top = num(cell(r, c)); return rows.some((x, i) => i > at && num(cell(x, c)) > top * 1.25) })
+  return cols.some(c => { const top = num(cell(r, c), decimalComma); return rows.some((x, i) => i > at && num(cell(x, c), decimalComma) > top * 1.25) })
 }
 
 export function assessmentColumns(csv: Csv, map: Mapping): number[] {
@@ -231,7 +244,7 @@ export interface Validation { part: Partial<Dataset> & { mapping?: MappingRow[] 
 export interface MappingRow { assessment: string; id: string; src?: string; standards: string[]; items: Record<string, string>; date?: string; max?: number; reassessOf?: Named }
 
 /** A plain number, accepting decimal commas; NaN otherwise. */
-const num = (raw: string) => { const p = parseScore(raw); return p.kind === 'pts' && p.max === undefined ? p.pts : NaN }
+const num = (raw: string, decimalComma?: boolean) => { const p = parseScore(raw, decimalComma); return p.kind === 'pts' && p.max === undefined ? p.pts : NaN }
 const cell = (r: string[], i: number | undefined) => i === undefined || i < 0 ? '' : (r[i] ?? '').trim()
 
 function studentFrom(r: string[], map: Mapping, kind: Kind): { id: string; name: string; section?: string } | null {
@@ -291,7 +304,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       const d = cell(r, map.date)
       if (d) { const p = parseDate(d); if (p) m.date = p; else issues.push({ line, level: 'warn', message: `Could not read the date "${d}". Use YYYY-MM-DD.` }) }
       const mx = cell(r, map.max)
-      if (mx) { const n = num(mx); if (n > 0) m.max = n; else issues.push({ line, level: 'warn', message: `Points possible "${mx}" is not a positive number.` }) }
+      if (mx) { const n = num(mx, csv.decimalComma); if (n > 0) m.max = n; else issues.push({ line, level: 'warn', message: `Points possible "${mx}" is not a positive number.` }) }
       const re = cell(r, map.reassessOf)
       if (re) m.reassessOf = named(re)
       if (!codes.length && !item && !re && !d) issues.push({ line, level: 'warn', message: `"${name}" has no standards listed.` })
@@ -307,6 +320,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
   const scores: Score[] = []
   const itemScores: ItemScore[] = []
   let used = 0, missing = 0, excused = 0
+  const checks: { line: number; raw: string; student: string; a: Assessment; pts: number; max?: number }[] = []
 
   if (isWide(kind)) {
     const cols = assessCols ?? assessmentColumns(csv, map)
@@ -316,10 +330,10 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
     const students_ = body.filter(({ r }, at) => {
       if (r.some(x => /^manual posting/i.test(x.trim()))) return false
       const first = (r[0] ?? '').trim(), probe = r.slice(0, 4).map(x => x.trim()).find(x => META_ROW.test(x)) ?? (META_ROW.test(first) ? first : '')
-      if (!probe || isStudentRow(body.map(b => b.r), at, probe, map, cols)) return true
+      if (!probe || isStudentRow(body.map(b => b.r), at, probe, map, cols, csv.decimalComma)) return true
       for (const c of cols) {
         const v = cell(r, c)
-        if (/points|out of|max/i.test(probe)) { const p = parseScore(v); if (p.kind === 'pts' && p.pts > 0) metaPoints.set(c, p.pts) }
+        if (/points|out of|max/i.test(probe)) { const p = parseScore(v, csv.decimalComma); if (p.kind === 'pts' && p.pts > 0) metaPoints.set(c, p.pts) }
         if (/date|due/i.test(probe)) { const d = parseDate(v); if (d) metaDates.set(c, d) }
       }
       return false
@@ -358,7 +372,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       let any = false
       for (const c of cols) {
         const a = assessments.get(byCol.get(c)!.id)!
-        const p = parseScore(cell(r, c))
+        const p = parseScore(cell(r, c), csv.decimalComma)
         if (p.kind === 'blank') continue
         if (p.kind === 'missing') { missing++; continue }
         if (p.kind === 'excused') { excused++; continue }
@@ -369,6 +383,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
           // "7/8" in a column whose maximum is already known from another format is rescaled to that maximum.
           scores.push({ s: st.id, a: a.id, pts: p.max && a.max !== p.max ? p.pts / p.max * a.max : p.pts, ...(p.max ? { max: a.max } : {}) })
         }
+        checks.push({ line, raw: cell(r, c), student: st.name, a, pts: scores[scores.length - 1].pts, max: scores[scores.length - 1].max })
         any = true
       }
       if (any) used++
@@ -399,7 +414,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       if (!st) { issues.push({ line, level: 'error', message: 'No student name or ID; row skipped.' }); continue }
       const { id, name, src } = named(cell(r, map.assessment))
       if (!name) { issues.push({ line, level: 'error', message: 'No assessment name; row skipped.' }); continue }
-      const p = parseScore(cell(r, map.score))
+      const p = parseScore(cell(r, map.score), csv.decimalComma)
       if (p.kind === 'blank') { issues.push({ line, level: 'warn', message: `Empty score for ${st.name} on "${name}".` }); continue }
       if (p.kind === 'missing') { missing++; continue }
       if (p.kind === 'excused') { excused++; continue }
@@ -407,8 +422,8 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       const mxRaw = cell(r, map.max)
       // A fraction is out of its own total whatever the points column says.
       const own = p.kind === 'pts' && p.max ? p.max : 0
-      const mx = own || (mxRaw ? num(mxRaw) : p.kind === 'pts' ? NaN : 100)
-      if (mxRaw && !(num(mxRaw) > 0)) { issues.push({ line, level: 'error', message: `Points possible "${mxRaw}" is not a positive number; row skipped.` }); continue }
+      const mx = own || (mxRaw ? num(mxRaw, csv.decimalComma) : p.kind === 'pts' ? NaN : 100)
+      if (mxRaw && !(num(mxRaw, csv.decimalComma) > 0)) { issues.push({ line, level: 'error', message: `Points possible "${mxRaw}" is not a positive number; row skipped.` }); continue }
       const dRaw = cell(r, map.date), d = dRaw ? parseDate(dRaw) : ''
       if (dRaw && !d) issues.push({ line, level: 'warn', message: `Could not read the date "${dRaw}". Use YYYY-MM-DD.` })
       const a = assessments.get(id) ?? { id, name, ...(src ? { src } : {}), date: '', order: order++, max: 0, standards: [] }
@@ -417,6 +432,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       assessments.set(id, a)
       students.set(st.id, withKnownName(students.get(st.id), st))
       const pts = p.kind === 'pct' ? p.pct * (mx > 0 ? mx : 100) : p.pts
+      if (!(p.kind === 'pts' && !(mx > 0) && kind === 'items')) checks.push({ line, raw: cell(r, map.score), student: st.name, a, pts, max: mx > 0 ? mx : undefined })
       if (kind === 'items') {
         const codes = cell(r, map.standard).split(/[;|]+/).map(x => x.trim()).filter(Boolean).map(normalizeCode)
         const item = cell(r, map.item)
@@ -439,6 +455,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
     for (const a of assessments.values()) if (a.max && !given.has(a.id)) a.maxAssumed = true
     for (const a of assessments.values()) if (!a.max && kind !== 'items') { a.max = 100; a.maxAssumed = true; issues.push({ line: 0, level: 'warn', message: `No points possible for "${a.name}"; assumed 100.` }) }
   }
+  for (const { line, raw, student, a, pts, max = a.max } of checks) if (max > 0 && pts > max * 1.5 + 1e-9) issues.push({ line, level: 'warn', message: `"${raw}" for ${student} on "${a.name}" is far above its ${Math.round(max * 100) / 100} points possible. Check the score and the points.` })
   if (missing) issues.push({ line: 0, level: 'warn', message: `${missing} "missing" marks are not counted as evidence (a missing assessment is not a 0 on a standard). Chase those separately.` })
   if (excused) issues.push({ line: 0, level: 'warn', message: `${excused} excused marks ignored.` })
   const nRows = isWide(kind) ? students.size + issues.filter(i => i.level === 'error' && i.line > 0).length : all.length
