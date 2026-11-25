@@ -158,6 +158,19 @@ export function detectKind(headers: string[], rows: string[][] = []): Kind {
 const NOT_ASSESSMENT = /^(last ?name|first ?name|email( address)?|student|id|sis (user|login) id|integration id|root account|section|student name|name|student id|student number|overall( grade)?|total|average( score)?|status|.*\b(current|final|unposted) (score|grade|points)\b.*|override (score|grade|status)\b.*|grade|period|class)$/i
 const META_ROW = /^(points possible|points|out of|max(imum)?|date|due( date)?|class average|average|manual posting|read only)$/i
 
+/** "Max" and "Date" are also people's names, so a row with such a label is a student when anything else in it says so. */
+function isStudentRow(rows: string[][], at: number, label: string, map: Mapping, cols: number[]): boolean {
+  if (!/^(max|date)$/i.test(label)) return false
+  const r = rows[at]
+  const ids = [map.sid, map.name, map.first, map.last].map(i => cell(r, i)).filter(x => /[\p{L}\p{N}]/u.test(x))
+  if (ids.some(x => !META_ROW.test(x))) return true
+  // "Max" alone in a name column: a points row sits above every student, is the only such row and is not far below other scores (extra credit may pass it).
+  if (!/^max$/i.test(label)) return false
+  const isPoints = (x: string[]) => /^(points possible|points|out of|maximum)$/i.test((x[0] ?? '').trim())
+  if (rows.slice(0, at).some(x => !META_ROW.test((x[0] ?? '').trim())) || rows.some(isPoints)) return true
+  return cols.some(c => { const top = num(cell(r, c)); return rows.some((x, i) => i > at && num(cell(x, c)) > top * 1.25) })
+}
+
 export function assessmentColumns(csv: Csv, map: Mapping): number[] {
   const head = csv.rows[0] ?? []
   const used = new Set(Object.values(map))
@@ -242,10 +255,10 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
     if (!cols.length) issues.push({ line: csv.lines[0] ?? 1, level: 'error', message: 'No assessment columns found. Choose them below.' })
     // Meta rows (Points Possible, Date, Class average) come right after the header in Canvas and Google Classroom exports.
     const metaPoints = new Map<number, number>(), metaDates = new Map<number, string>()
-    const students_ = body.filter(({ r }) => {
+    const students_ = body.filter(({ r }, at) => {
       if (r.some(x => /^manual posting/i.test(x.trim()))) return false
       const first = (r[0] ?? '').trim(), probe = r.slice(0, 4).map(x => x.trim()).find(x => META_ROW.test(x)) ?? (META_ROW.test(first) ? first : '')
-      if (!probe) return true
+      if (!probe || isStudentRow(body.map(b => b.r), at, probe, map, cols)) return true
       for (const c of cols) {
         const v = cell(r, c)
         if (/points|out of|max/i.test(probe)) { const p = parseScore(v); if (p.kind === 'pts' && p.pts > 0) metaPoints.set(c, p.pts) }
