@@ -101,10 +101,11 @@ test('#9 a negative score is not evidence', async ({ page }) => {
   await expect(pending(page, 'n.csv')).toContainText('"-3" under "Quiz 1" is not a score; ignored.')
 })
 
-test.fail('#10 a name that looks like a formula is exported as text', async ({ page }) => {
+test('#10 a name that looks like a formula is exported as text', async ({ page }) => {
   await classWith(page, 'Student,Quiz 1\nPoints Possible,10\n=1+1,9\n', 'assessment,standard\nQuiz 1,7.EE.A.1\n')
   const f = await saved(page, () => page.getByRole('button', { name: 'Download CSV' }).click())
   expect(f.text).not.toMatch(/^=/m)
+  expect(f.text).toContain("\n'=1+1,4,1/1,A\n")
 })
 
 test('#11 a score that became excused is removed on re-import', async ({ page }) => {

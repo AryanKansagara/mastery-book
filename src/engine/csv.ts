@@ -48,7 +48,9 @@ function sniffDelimiter(text: string): string {
   return [',', '\t', ';'].map(d => [d, head.split(d).length] as const).sort((a, b) => b[1] - a[1])[0][0]
 }
 
-export const csvCell = (v: unknown) => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
+// Spreadsheets run text that starts like a formula (OWASP, CSV injection); an apostrophe in front makes it text again.
+const FORMULA = /^'*[=+\-@\t\r\n＝＋－＠]/
+export const csvCell = (v: unknown) => { const s = typeof v === 'string' && FORMULA.test(v) ? `'${v}` : String(v ?? ''); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
 export const toCsv = (rows: unknown[][]) => rows.map(r => r.map(csvCell).join(',')).join('\n') + '\n'
 
 /** FNV-1a: stable pseudonymous ids so names never need to leave the device. */
@@ -249,11 +251,14 @@ export interface MappingRow { assessment: string; id: string; src?: string; stan
 
 /** A plain number, accepting decimal commas; NaN otherwise. */
 const num = (raw: string, decimalComma?: boolean) => { const p = parseScore(raw, decimalComma); return p.kind === 'pts' && p.max === undefined ? p.pts : NaN }
+/** A name as it was before csvCell. */
+const plainText = (s: string) => s.startsWith("'") && FORMULA.test(s) ? s.slice(1) : s
+const text = (r: string[], i: number | undefined) => plainText(cell(r, i))
 const cell = (r: string[], i: number | undefined) => i === undefined || i < 0 ? '' : (r[i] ?? '').trim()
 
 function studentFrom(r: string[], map: Mapping, kind: Kind): { id: string; name: string; section?: string } | null {
-  let name = cell(r, map.name)
-  if (!name && (map.first !== undefined || map.last !== undefined)) name = [cell(r, map.first), cell(r, map.last)].filter(Boolean).join(' ')
+  let name = text(r, map.name)
+  if (!name && (map.first !== undefined || map.last !== undefined)) name = [text(r, map.first), text(r, map.last)].filter(Boolean).join(' ')
   // "Last, First" (Canvas, PowerSchool) reads better as "First Last".
   if ((kind === 'canvas' || kind === 'powerschool' || /,/.test(name)) && /^[^,]+,\s*[^,]+$/.test(name)) { const [l, f] = name.split(/,\s*/); name = `${f} ${l}` }
   const key = cell(r, map.sid) || name
@@ -285,7 +290,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
   if (kind === 'standards') {
     const out: { code: string; desc: string }[] = []
     for (const { r, line } of body) {
-      const code = normalizeCode(cell(r, map.standard)), desc = cell(r, map.desc)
+      const code = normalizeCode(text(r, map.standard)), desc = cell(r, map.desc)
       if (!code) { issues.push({ line, level: 'error', message: 'No standard code; row skipped.' }); continue }
       out.push({ code, desc: desc || code })
     }
@@ -294,13 +299,13 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
 
   if (kind === 'mapping') {
     const rows = new Map<string, MappingRow>()
-    const named = nameAssessments(body.flatMap(b => [cell(b.r, map.assessment), cell(b.r, map.reassessOf)]).filter(Boolean))
+    const named = nameAssessments(body.flatMap(b => [text(b.r, map.assessment), text(b.r, map.reassessOf)]).filter(Boolean))
     let used = 0
     for (const { r, line } of body) {
-      const { id, name, src } = named(cell(r, map.assessment))
+      const { id, name, src } = named(text(r, map.assessment))
       if (!name) { issues.push({ line, level: 'error', message: 'No assessment name; row skipped.' }); continue }
-      const codes = cell(r, map.standard).split(/[;|]+|\s{2,}|,\s*(?=[0-9A-Z])/i).map(x => x.trim()).filter(Boolean).map(normalizeCode)
-      const item = cell(r, map.item)
+      const codes = text(r, map.standard).split(/[;|]+|\s{2,}|,\s*(?=[0-9A-Z])/i).map(x => x.trim()).filter(Boolean).map(normalizeCode)
+      const item = text(r, map.item)
       const m = rows.get(id) ?? { assessment: name, id, ...(src ? { src } : {}), standards: [], items: {} }
       for (const c of codes) if (!m.standards.includes(c)) m.standards.push(c)
       if (item && codes[0]) m.items[item] = codes[0]
@@ -309,7 +314,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       if (d) { const p = parseDate(d); if (p) m.date = p; else issues.push({ line, level: 'warn', message: `Could not read the date "${d}". Use YYYY-MM-DD.` }) }
       const mx = cell(r, map.max)
       if (mx) { const n = num(mx, csv.decimalComma); if (n > 0) m.max = n; else issues.push({ line, level: 'warn', message: `Points possible "${mx}" is not a positive number.` }) }
-      const re = cell(r, map.reassessOf)
+      const re = text(r, map.reassessOf)
       if (re) m.reassessOf = named(re)
       if (!codes.length && !item && !re && !d) issues.push({ line, level: 'warn', message: `"${name}" has no standards listed.` })
       rows.set(id, m)
@@ -343,19 +348,20 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       }
       return false
     })
-    const named = nameAssessments(cols.map(c => head[c]))
+    const heading = (c: number) => plainText(head[c] ?? '')
+    const named = nameAssessments(cols.map(c => heading(c)))
     const byCol = new Map<number, Named>()
     const groups = new Map<string, number[]>()
-    for (const c of cols) { const { id } = named(head[c]); groups.set(id, [...(groups.get(id) ?? []), c]) }
+    for (const c of cols) { const { id } = named(heading(c)); groups.set(id, [...(groups.get(id) ?? []), c]) }
     const taken = new Set(groups.keys())
     for (const g of groups.values()) {
       // Columns with nothing but the name in common are numbered by date when all have one, or else by place.
       const dated = g.every(c => metaDates.has(c))
       const inOrder = dated ? [...g].sort((x, y) => metaDates.get(x)!.localeCompare(metaDates.get(y)!) || x - y) : g
-      const first = named(head[g[0]])
+      const first = named(heading(g[0]))
       let n = 1
       inOrder.forEach((c, i) => {
-        let a = named(head[c])
+        let a = named(heading(c))
         while (i && taken.has(a.id)) { const name = `${first.name} (${++n})`; a = { ...a, name, id: hashId('a', name) } }
         taken.add(a.id)
         byCol.set(c, a)
@@ -418,17 +424,17 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
     const given = new Set<string>()
     // Per score: plain points, which follow the assessment's points possible when that is what they were out of.
     const raw: boolean[] = []
-    const named = nameAssessments(body.map(b => cell(b.r, map.assessment)).filter(Boolean))
+    const named = nameAssessments(body.map(b => text(b.r, map.assessment)).filter(Boolean))
     const at = new Map<string, { line: number; i: number }>()
     const replaced = new Set<number>()
     for (const { r, line } of body) {
       const st = studentFrom(r, map, kind)
       if (!st) { issues.push({ line, level: 'error', message: 'No student name or ID; row skipped.' }); continue }
-      const { id, name, src } = named(cell(r, map.assessment))
+      const { id, name, src } = named(text(r, map.assessment))
       if (!name) { issues.push({ line, level: 'error', message: 'No assessment name; row skipped.' }); continue }
       const p = parseScore(cell(r, map.score), csv.decimalComma)
-      const codes = kind === 'items' ? cell(r, map.standard).split(/[;|]+/).map(x => x.trim()).filter(Boolean).map(normalizeCode) : []
-      const item = kind === 'items' ? cell(r, map.item) : ''
+      const codes = kind === 'items' ? text(r, map.standard).split(/[;|]+/).map(x => x.trim()).filter(Boolean).map(normalizeCode) : []
+      const item = kind === 'items' ? text(r, map.item) : ''
       const mark: Mark = { s: st.id, a: id, ...(item ? { item } : {}), ...(codes.length ? { stds: codes } : {}) }
       if (p.kind === 'blank' || p.kind === 'bad') { unscored.push(mark); refs.set(id, { id, name, src }) }
       if (p.kind === 'blank') { issues.push({ line, level: 'warn', message: `Empty score for ${st.name} on "${name}".` }); continue }
