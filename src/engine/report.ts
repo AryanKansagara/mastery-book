@@ -33,7 +33,13 @@ export interface SnapshotDiff {
   share: { before: number; after: number }
   students: { sid: string; before: string | null; after: string | null; move: number }[]
   standards: { code: string; before: number | null; after: number | null }[]
-  up: number; down: number; same: number
+  up: number; down: number
+  /** Same letter in both snapshots */
+  same: number
+  /** In only the later or only the earlier snapshot */
+  added: string[]; removed: string[]
+  /** In both, but one letter is not on the class's scale (no evidence, or a renamed letter) */
+  other: number
 }
 
 export function compareSnapshots(a: Snapshot, b: Snapshot, cfg: Config): SnapshotDiff {
@@ -44,6 +50,7 @@ export function compareSnapshots(a: Snapshot, b: Snapshot, cfg: Config): Snapsho
     const rb = rank(before), ra = rank(after)
     return { sid, before, after, move: rb !== null && ra !== null ? rb - ra : 0 }
   })
+  const both = students.filter(s => s.before !== null && s.after !== null)
   const shareOf = (s: Snapshot, code: string) => {
     const ls = s.rows.map(r => r.levels[code]).filter((x): x is number => x !== undefined)
     return ls.length ? ls.filter(l => l >= cfg.scale.proficient).length / ls.length : null
@@ -53,7 +60,9 @@ export function compareSnapshots(a: Snapshot, b: Snapshot, cfg: Config): Snapsho
     share: { before: a.share, after: b.share },
     students,
     standards: codes.map(code => ({ code, before: shareOf(a, code), after: shareOf(b, code) })),
-    up: students.filter(s => s.move > 0).length, down: students.filter(s => s.move < 0).length, same: students.filter(s => s.move === 0).length,
+    up: students.filter(s => s.move > 0).length, down: students.filter(s => s.move < 0).length, same: both.filter(s => s.before === s.after).length,
+    added: students.filter(s => s.before === null).map(s => s.sid), removed: students.filter(s => s.after === null).map(s => s.sid),
+    other: both.filter(s => s.move === 0 && s.before !== s.after).length,
   }
 }
 

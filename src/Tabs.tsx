@@ -357,6 +357,9 @@ function History({ project, ds, cfg, update }: TabProps) {
                 <div className="kpi"><small>Letters up</small><b className="good-text">{d.up}</b></div>
                 <div className="kpi"><small>Letters down</small><b className="error">{d.down}</b></div>
                 <div className="kpi"><small>Unchanged</small><b>{d.same}</b></div>
+                {d.other > 0 && <div className="kpi"><small>Not comparable</small><b>{d.other}</b><p>No evidence or a renamed letter on one side</p></div>}
+                {d.added.length > 0 && <div className="kpi"><small>New students</small><b>{d.added.length}</b></div>}
+                {d.removed.length > 0 && <div className="kpi"><small>No longer in the class</small><b>{d.removed.length}</b></div>}
               </div>
               {A.method !== B.method && <p className="warn-text small">These snapshots used different methods ({methodLabel(A.method, cfg)} vs {methodLabel(B.method, cfg)}), so some moves come from the method, not learning.</p>}
               <div className="grid-2">
@@ -371,10 +374,11 @@ function History({ project, ds, cfg, update }: TabProps) {
                   <h3>Students whose letter moved</h3>
                   <div className="table-wrap"><table>
                     <thead><tr><th>Student</th><th className="center">{A.label.replace(/\s*\(.*\)$/, '')}</th><th className="center">{B.label.replace(/\s*\(.*\)$/, '')}</th></tr></thead>
-                    <tbody>{d.students.filter(s => s.before !== s.after).sort((x, y) => y.move - x.move).map(s => (
+                    <tbody>{d.students.filter(s => s.before !== null && s.after !== null && s.before !== s.after).sort((x, y) => y.move - x.move).map(s => (
                       <tr key={s.sid}><th scope="row">{names.get(s.sid) ?? `Student ${s.sid.slice(1, 6)}`}</th><td className="center"><span className={`letter g-${s.before}`}>{s.before ?? '—'}</span></td><td className="center"><span className={`letter g-${s.after}`}>{s.after ?? '—'}</span> <span className={s.move > 0 ? 'good-text' : 'error'}>{s.move > 0 ? '▲' : s.move < 0 ? '▼' : ''}</span></td></tr>
                     ))}</tbody>
                   </table></div>
+                  {([[B, d.added], [A, d.removed]] as const).map(([snap, list]) => list.length > 0 && <p key={snap.id} className="small">Only in {snap.label}: {list.map(sid => `${names.get(sid) ?? `Student ${sid.slice(1, 6)}`} (${snap.rows.find(r => r.sid === sid)!.letter})`).join(', ')}</p>)}
                 </div>
               </div>
             </>
