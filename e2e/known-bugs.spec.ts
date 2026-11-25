@@ -50,12 +50,20 @@ test('#5 a percent stays a percent when points possible arrive later', async ({ 
   expect((await levels(page, 'Ada'))[0]).toBe('3')
 })
 
-test.fail('#6 importing the mapping first does not change level scores', async ({ page }) => {
+test('#6 importing the mapping first does not change level scores', async ({ page }) => {
   await newClass(page)
   await importFile(page, 'mapping.csv', 'assessment,standard\nCheck 1,F-IF.A.1\n')
   await importFile(page, 'scores.csv', 'Student,Check 1\nPoints Possible,4\nAda,3\nBo,2\n')
   await tab(page, 'Gradebook')
   expect((await levels(page, 'Bo'))[0]).toBe('2')
+})
+
+test('#6 points added to a level-scored class are pointed out', async ({ page }) => {
+  await classWith(page, 'Student,Check 1\nPoints Possible,4\nAda,3\n', 'assessment,standard\nCheck 1,F-IF.A.1\nUnit test,F-IF.A.1\n')
+  await tab(page, 'Data & setup')
+  await expect(page.locator('.banner.warn')).toHaveCount(0)
+  await importFile(page, 'test.csv', 'Student,Unit test\nPoints Possible,20\nAda,14\n')
+  await expect(page.locator('.banner.warn')).toContainText('1 assessment is not out of 4, 5 or the top of your scale: Unit test')
 })
 
 test.fail('#7 undated work keeps its column place', async ({ page }) => {

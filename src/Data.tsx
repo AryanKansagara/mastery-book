@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { assessmentColumns, autoMap, detectKind, FIELD_LABEL, FIELDS_FOR, isWide, KINDS, mergeDataset, parseCsv, toCsv, validate, withMax, type Csv, type Kind, type Mapping, type Validation } from './engine/csv.ts'
 import { SCALES, standardsInUse } from './engine/mastery.ts'
+import { detectScoreMode, notLevels } from './engine/scoremode.ts'
 import { CCSS, normalizeCode } from './engine/standards.ts'
 import type { Assessment, Config, Dataset, GradeRule } from './engine/types.ts'
 import { createBlankProject, displayName, stdDesc } from './projectData.ts'
@@ -45,9 +46,10 @@ export default function DataTab({ project, ds, cfg, update, setConfig }: { proje
     const merged = mergeDataset(readOnly ? { students: [], assessments: [], scores: [], itemScores: [] } : ds, v.part)
     await putData(t.id, merged)
     const meta = { id: uuid(), kind: p.kind, fileName: p.name, rows: v.rows, skipped: v.skipped, at: Date.now() }
-    // Level-scored gradebooks (max 4 everywhere) are switched to level mode automatically.
-    const levelLike = merged.assessments.length > 0 && merged.assessments.every(a => a.max > 0 && a.max <= 5) && merged.itemScores.every(i => i.max <= 5)
-    const config = !readOnly && project.imports.length ? cfg : { ...t.config, scoreMode: levelLike ? 'level' as const : 'percent' as const }
+    // The first file with scores decides; a mapping or standards list says nothing about how scores are written.
+    const decided = !readOnly && project.imports.some(i => i.kind !== 'mapping' && i.kind !== 'standards')
+    const scoreMode = decided ? null : detectScoreMode(merged, t.config.scale)
+    const config = scoreMode ? { ...t.config, scoreMode } : t.config
     await saveProject({ ...t, config, imports: [...(readOnly ? [] : project.imports), meta], dataMissing: false })
     setPending(x => x.filter(y => y.id !== p.id))
     toast(`Imported ${p.name}: ${v.summary}`, { tone: 'ok' })
@@ -63,6 +65,7 @@ export default function DataTab({ project, ds, cfg, update, setConfig }: { proje
   const setAssessment = (id: string, patch: Partial<Assessment>) => void saveDs({ ...ds, assessments: ds.assessments.map(a => a.id === id ? { ...a, ...patch } : a) })
 
   const stds = standardsInUse(ds)
+  const points = cfg.scoreMode === 'level' ? notLevels(ds, cfg.scale) : []
   const untagged = ds.assessments.filter(a => !a.standards.length)
 
   return (
@@ -72,6 +75,8 @@ export default function DataTab({ project, ds, cfg, update, setConfig }: { proje
         <div className="banner"><span><strong>Start here.</strong> 1. Export your gradebook (<Link href="/docs">exact steps for Google Classroom, Canvas and PowerSchool</Link>). 2. Drop it below. 3. Tag each assessment with its standards, or drop a mapping file too.</span></div>
       )}
       {ds.students.length > 0 && untagged.length > 0 && !readOnly && <div className="banner warn"><span><strong>{untagged.length} assessment{untagged.length > 1 ? 's have' : ' has'} no standards yet.</strong> Scores only count once an assessment is tagged. Use the Assessments panel below or import a mapping file.</span></div>}
+
+      {points.length > 0 && <div className="banner warn"><span><strong>Scores are read as proficiency levels, but {points.length} assessment{points.length > 1 ? 's are' : ' is'} not out of 4, 5 or the top of your scale:</strong> {points.slice(0, 5).join(', ')}{points.length > 5 ? ` and ${points.length - 5} more` : ''}. Those scores do not use your percent cut-offs. If they are points, set &ldquo;Scores are&rdquo; to Points in Grading setup, or keep them in another class.</span></div>}
 
       <div className="panel">
         <div className="panel-head"><h2>Import</h2><span className="muted small">Google Classroom · Canvas · Khan Academy · PowerSchool · any CSV · mapping · item scores · standards list</span></div>
