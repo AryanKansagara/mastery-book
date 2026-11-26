@@ -25,6 +25,7 @@ npm install
 npm run dev      # http://localhost:5173
 npm test         # engine tests
 npm run build
+npm run test:e2e  # builds, then runs Playwright on the production build (first time: npx playwright install chromium; E2E_PORT sets the port)
 ```
 
 Optional sync: copy `.env.example` to `.env` with `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`.
