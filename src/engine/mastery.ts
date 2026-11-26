@@ -157,7 +157,9 @@ export function evidenceFor(ds: Dataset, cfg: Config): Map<string, Map<string, E
     for (const std of a.standards) {
       const k = `${sc.s}|${a.id}|${std}`
       const it = items.get(k)
-      push(sc.s, std, a, it ? toValue(it.pts, it.max) : toValue(sc.pts, a.max))
+      // Points out of an unknown total say nothing about a percent.
+      if (!it && cfg.scoreMode === 'percent' && !((sc.max ?? a.max) > 0)) continue
+      push(sc.s, std, a, it ? toValue(it.pts, it.max) : toValue(sc.pts, sc.max ?? a.max))
       seen.add(k)
     }
   }
