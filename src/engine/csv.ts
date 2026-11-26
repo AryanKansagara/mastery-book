@@ -200,6 +200,10 @@ function studentFrom(r: string[], map: Mapping, kind: Kind): { id: string; name:
   return { id: studentId(key), name: name || key, ...(section ? { section } : {}) }
 }
 
+/** A student whose file had no name is called by their ID; that never replaces a name already known. */
+const namedOnlyById = (s: Student) => studentId(s.name) === s.id
+const withKnownName = (cur: Student | undefined, s: Student): Student => cur?.name && namedOnlyById(s) && !namedOnlyById(cur) ? { ...cur, ...s, name: cur.name } : { ...cur, ...s, name: s.name || cur?.name || s.id }
+
 /** Validates and converts one parsed file. Line numbers are 1-based lines in the original file. */
 export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number[]): Validation {
   const issues: Issue[] = []
@@ -330,7 +334,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
       if (d && !a.date) a.date = d
       if (mx > 0 && kind !== 'items') a.max = Math.max(a.max, mx)
       assessments.set(id, a)
-      students.set(st.id, students.get(st.id)?.name ? { ...students.get(st.id)!, ...st } : st)
+      students.set(st.id, withKnownName(students.get(st.id), st))
       const pts = p.kind === 'pct' ? p.pct * (mx > 0 ? mx : 100) : p.pts
       if (kind === 'items') {
         const codes = cell(r, map.standard).split(/[;|]+/).map(x => x.trim()).filter(Boolean).map(normalizeCode)
@@ -360,7 +364,7 @@ export function validate(csv: Csv, kind: Kind, map: Mapping, assessCols?: number
 /** Merges an imported part into a dataset. Re-importing the same file updates scores instead of duplicating them. */
 export function mergeDataset(base: Dataset, part: Validation['part']): Dataset {
   const students = new Map(base.students.map(s => [s.id, s]))
-  for (const s of part.students ?? []) students.set(s.id, { ...students.get(s.id), ...s, name: s.name || students.get(s.id)?.name || s.id })
+  for (const s of part.students ?? []) students.set(s.id, withKnownName(students.get(s.id), s))
   const assessments = new Map(base.assessments.map(a => [a.id, { ...a }]))
   let order = Math.max(-1, ...base.assessments.map(a => a.order)) + 1
   for (const a of part.assessments ?? []) {
