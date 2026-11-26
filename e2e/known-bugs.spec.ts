@@ -2,7 +2,7 @@ import { choose, classWith, expect, importFile, kpi, levels, method, newClass, p
 
 // Each test states the right behaviour. `test.fail` pins an open issue; its fix turns the line into a normal test.
 
-test.fail('#2 a student named Max is a student', async ({ page }) => {
+test('#2 a student named Max is a student', async ({ page }) => {
   await newClass(page)
   await choose(page, { name: 'max.csv', text: 'Last Name,First Name,Email Address,Quiz 1,Quiz 2\nPoints,,,10,20\nOkafor,Ada,a@x.org,9,18\nRuiz,Max,m@x.org,4,6\n' })
   await expect(pending(page, 'max.csv')).toContainText('2 students, 2 assessments, 4 scores')
