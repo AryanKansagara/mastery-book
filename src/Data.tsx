@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { assessmentColumns, autoMap, detectKind, FIELD_LABEL, FIELDS_FOR, isWide, KINDS, mergeDataset, parseCsv, toCsv, validate, type Csv, type Kind, type Mapping, type Validation } from './engine/csv.ts'
+import { assessmentColumns, autoMap, detectKind, FIELD_LABEL, FIELDS_FOR, isWide, KINDS, mergeDataset, parseCsv, toCsv, validate, withMax, type Csv, type Kind, type Mapping, type Validation } from './engine/csv.ts'
 import { SCALES, standardsInUse } from './engine/mastery.ts'
 import { CCSS, normalizeCode } from './engine/standards.ts'
 import type { Assessment, Config, Dataset, GradeRule } from './engine/types.ts'
@@ -30,6 +30,7 @@ export default function DataTab({ project, ds, cfg, update, setConfig }: { proje
       if (f.size > 20_000_000) { toast(`${f.name} is over 20 MB. Export one class at a time.`, { tone: 'error' }); continue }
       if (/\.xlsx?$/i.test(f.name)) { toast(`${f.name}: save the sheet as CSV first (File > Download > CSV).`, { tone: 'error' }); continue }
       const csv = parseCsv(await f.text())
+      if (csv.rows.length < 2 && csv.badQuote) { toast(`${f.name}: the quote that starts on line ${csv.badQuote} is never closed, so no rows can be read.`, { tone: 'error' }); continue }
       if (csv.rows.length < 2) { toast(`${f.name} has no data rows.`, { tone: 'error' }); continue }
       const kind = detectKind(csv.rows[0], csv.rows)
       const map = autoMap(csv.rows[0], kind)
@@ -98,7 +99,7 @@ export default function DataTab({ project, ds, cfg, update, setConfig }: { proje
               <tr key={a.id}>
                 <th scope="row" className="break">{a.name}{a.items && Object.keys(a.items).length > 0 && <div className="muted tiny">{Object.keys(a.items).length} tagged items</div>}</th>
                 <td><input className="table-input" type="date" value={a.date} disabled={readOnly} aria-label={`Date of ${a.name}`} onChange={e => setAssessment(a.id, { date: e.target.value })} /></td>
-                <td className="num"><input className="table-input" type="number" min="1" style={{ width: 70 }} value={a.max} disabled={readOnly} aria-label={`Points possible for ${a.name}`} onChange={e => setAssessment(a.id, { max: Math.max(0, Number(e.target.value)) })} /></td>
+                <td className="num"><input className="table-input" type="number" min="1" style={{ width: 70 }} value={a.max} disabled={readOnly} aria-label={`Points possible for ${a.name}`} onChange={e => setAssessment(a.id, withMax(a, Math.max(0, Number(e.target.value))))} /></td>
                 <td><StdChips a={a} readOnly={readOnly} ds={ds} onChange={standards => setAssessment(a.id, { standards })} /></td>
                 <td><select className="table-input" value={a.reassessOf ?? ''} disabled={readOnly} aria-label={`${a.name} is a reassessment of`} onChange={e => setAssessment(a.id, { reassessOf: e.target.value || undefined })}>
                   <option value="">Not a reassessment</option>
@@ -155,7 +156,7 @@ function PendingFile({ p, onChange, onCancel, onCommit }: { p: Pending; onChange
   const [busy, setBusy] = useState(false)
   const headers = p.csv.rows[0] ?? []
   const errors = v.issues.filter(i => i.level === 'error')
-  const blocking = errors.some(e => /Map a column|No assessment columns/.test(e.message))
+  const blocking = errors.some(e => /Map a column|No assessment columns|never closed/.test(e.message))
   return (
     <div className="panel">
       <div className="panel-head">
@@ -258,7 +259,9 @@ function GradingSetup({ cfg, setConfig }: { cfg: Config; setConfig(p: Partial<Co
 const sorted = (ds: Dataset) => [...ds.assessments].sort((x, y) => (x.date || '9').localeCompare(y.date || '9') || x.order - y.order)
 export function gradebookCsv(ds: Dataset): string {
   const as = sorted(ds)
-  const pts = new Map(ds.scores.map(s => [`${s.s}|${s.a}`, s.pts]))
+  const max = new Map(ds.assessments.map(a => [a.id, a.max]))
+  // One points row per column, so a score out of another total is written out of the column's.
+  const pts = new Map(ds.scores.map(s => [`${s.s}|${s.a}`, s.max && max.get(s.a) && s.max !== max.get(s.a) ? Math.round(s.pts / s.max * max.get(s.a)! * 1e4) / 1e4 : s.pts]))
   return toCsv([
     ['Student ID', 'Student Name', ...as.map(a => a.name)],
     ['Date', '', ...as.map(a => a.date)],
@@ -274,6 +277,6 @@ export function scoresCsv(ds: Dataset): string {
   const names = new Map(ds.students.map(s => [s.id, displayName(s)]))
   const as = new Map(ds.assessments.map(a => [a.id, a]))
   return toCsv([['student id', 'student name', 'assessment', 'date', 'standard', 'score', 'points possible'],
-    ...ds.scores.map(s => [s.s, names.get(s.s), as.get(s.a)?.name, as.get(s.a)?.date, '', s.pts, as.get(s.a)?.max]),
+    ...ds.scores.map(s => [s.s, names.get(s.s), as.get(s.a)?.name, as.get(s.a)?.date, '', s.pts, s.max ?? as.get(s.a)?.max]),
     ...ds.itemScores.map(s => [s.s, names.get(s.s), as.get(s.a)?.name, as.get(s.a)?.date, s.std || s.item, s.pts, s.max])])
 }
